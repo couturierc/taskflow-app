@@ -372,7 +372,10 @@ export default function ProjectDetailScreen() {
             setIsTaskModalVisible(false);
             setSelectedTask(null);
           }}
-          onSave={loadProjectData}
+          onSave={(movedFromProject?: string) => {
+            // Always reload project data when saved (covers move, edit, delete cases)
+            loadProjectData();
+          }}
           task={selectedTask}
           defaultProjectId={id}
         />
