@@ -22,20 +22,22 @@ export default function CalendarScreen() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<TodoistTask | null>(null);
   const [isTaskModalVisible, setIsTaskModalVisible] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
   const colors = useColors();
 
   useEffect(() => {
     if (isAuthenticated) {
       loadTasks();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, showCompleted]);
 
   async function loadTasks() {
     if (!apiClient) return;
 
     try {
       const allTasks = await apiClient.getTasks();
-      setTasks(allTasks.filter(task => task.due && !task.is_completed));
+      // Filter based on showCompleted state - keep all tasks with due dates
+      setTasks(allTasks.filter(task => task.due && (showCompleted || !task.is_completed)));
     } catch (error) {
       console.error('Failed to load tasks:', error);
     } finally {
@@ -165,6 +167,23 @@ export default function CalendarScreen() {
               {tasks.length} task{tasks.length !== 1 ? 's' : ''} with due dates
             </Text>
           </View>
+
+          {/* Show/Hide Completed Toggle */}
+          <TouchableOpacity
+            className="flex-row items-center justify-between bg-surface border border-border rounded-xl px-4 py-3 mb-4"
+            onPress={() => setShowCompleted(!showCompleted)}
+          >
+            <Text className="text-base text-foreground">Show completed tasks</Text>
+            <View
+              className="w-12 h-7 rounded-full p-1"
+              style={{ backgroundColor: showCompleted ? colors.primary : colors.border }}
+            >
+              <View
+                className="w-5 h-5 rounded-full bg-white"
+                style={{ marginLeft: showCompleted ? 20 : 0 }}
+              />
+            </View>
+          </TouchableOpacity>
 
           {/* Month Navigation */}
           <View className="flex-row items-center justify-between mb-4">
@@ -302,10 +321,10 @@ export default function CalendarScreen() {
                           {task.priority > 1 && (
                             <View
                               className="px-2 py-1 rounded"
-                              style={{ backgroundColor: colors.warning + '20' }}
+                              style={{ backgroundColor: task.priority === 4 ? colors.error + '20' : task.priority === 3 ? colors.warning + '20' : colors.primary + '20' }}
                             >
-                              <Text className="text-xs font-medium" style={{ color: colors.warning }}>
-                                P{task.priority}
+                              <Text className="text-xs font-medium" style={{ color: task.priority === 4 ? colors.error : task.priority === 3 ? colors.warning : colors.primary }}>
+                                P{5 - task.priority}
                               </Text>
                             </View>
                           )}

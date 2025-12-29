@@ -39,6 +39,7 @@ export default function ProjectDetailScreen() {
   const [isSectionModalVisible, setIsSectionModalVisible] = useState(false);
   const [sectionName, setSectionName] = useState('');
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [showCompleted, setShowCompleted] = useState(false);
   const colors = useColors();
   const router = useRouter();
 
@@ -148,6 +149,11 @@ export default function ProjectDetailScreen() {
 
   // Filter and search tasks
   const filteredTasks = tasks.filter(task => {
+    // Hide completed tasks unless showCompleted is enabled
+    if (!showCompleted && task.is_completed) {
+      return false;
+    }
+
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       const matchesContent = task.content.toLowerCase().includes(query);
@@ -301,6 +307,23 @@ export default function ProjectDetailScreen() {
           onChangeText={setSearchQuery}
           onFilterPress={() => setIsFilterModalVisible(true)}
         />
+
+        {/* Show/Hide Completed Toggle */}
+        <TouchableOpacity
+          className="flex-row items-center justify-between bg-surface border border-border rounded-xl px-4 py-3 mb-4"
+          onPress={() => setShowCompleted(!showCompleted)}
+        >
+          <Text className="text-base text-foreground">Show completed tasks</Text>
+          <View
+            className="w-12 h-7 rounded-full p-1"
+            style={{ backgroundColor: showCompleted ? colors.primary : colors.border }}
+          >
+            <View
+              className="w-5 h-5 rounded-full bg-white"
+              style={{ marginLeft: showCompleted ? 20 : 0 }}
+            />
+          </View>
+        </TouchableOpacity>
 
         {/* Add Section Button */}
         <TouchableOpacity
