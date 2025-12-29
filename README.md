@@ -1,6 +1,12 @@
 # TaskFlow - Todoist Client
 
-A cross-platform task management app built with Expo/React Native that integrates with the Todoist API.
+<p align="center">
+  <img src="assets/images/icon.png" alt="TaskFlow Logo" width="120" height="120">
+</p>
+
+<p align="center">
+  A cross-platform task management app built with Expo/React Native that integrates with the Todoist API.
+</p>
 
 ## Features
 
@@ -58,7 +64,9 @@ npx expo prebuild --platform android
 cd android && ./gradlew assembleRelease
 ```
 
-### Using EAS Build (Recommended)
+### Using EAS Build
+
+If you have an Expo account with EAS Build credits:
 
 1. Create an Expo account at https://expo.dev
 2. Install EAS CLI: `npm install -g eas-cli`
@@ -67,19 +75,13 @@ cd android && ./gradlew assembleRelease
 
 ## CI/CD with GitHub Actions
 
-This project includes two GitHub Actions workflows for building Android APKs:
+This project includes a GitHub Actions workflow for building Android APKs locally:
 
-### Option 1: EAS Build (`.github/workflows/build-android.yml`)
+### Local Build (`.github/workflows/build-android-local.yml`)
 
-Requires an Expo account and `EXPO_TOKEN` secret in your GitHub repository settings.
+Builds directly on GitHub Actions runners without requiring an Expo account. Uses `expo prebuild` to generate native projects, then builds with Gradle.
 
-1. Go to https://expo.dev/accounts/[your-username]/settings/access-tokens
-2. Create a new token
-3. Add it as `EXPO_TOKEN` in your repo's Settings > Secrets and variables > Actions
-
-### Option 2: Local Build (`.github/workflows/build-android-local.yml`)
-
-Builds directly on GitHub Actions without Expo account. Uses `expo prebuild` to generate native projects.
+Triggered on pushes/PRs to main/master branches, or manually via workflow dispatch.
 
 ## Environment Variables
 

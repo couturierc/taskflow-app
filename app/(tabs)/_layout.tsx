@@ -53,14 +53,14 @@ export default function TabLayout() {
         name="projects"
         options={{
           title: "Projects",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="chevron.left.forwardslash.chevron.right" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="folder.fill" color={color} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: "Settings",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="chevron.left.forwardslash.chevron.right" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
         }}
       />
       <Tabs.Screen
