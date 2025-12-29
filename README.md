@@ -17,7 +17,7 @@
 - 🔄 Recurring tasks support
 - 📝 Markdown rendering in tasks
 - 🌙 Dark/Light theme support
-- 📱 Cross-platform (Android, Web) [iOS to be tested]
+- 📱 Cross-platform (Android, iOS, Web)
 
 ## Prerequisites
 
@@ -64,6 +64,24 @@ npx expo prebuild --platform android
 cd android && ./gradlew assembleRelease
 ```
 
+### iOS App (Local Build)
+
+```bash
+# Generate native iOS project
+npx expo prebuild --platform ios
+
+# Install CocoaPods dependencies
+cd ios && pod install
+
+# Build for Simulator (no code signing required)
+xcodebuild -workspace TaskFlow.xcworkspace -scheme TaskFlow \
+  -configuration Release -sdk iphonesimulator \
+  -destination 'platform=iOS Simulator,name=iPhone 15' \
+  CODE_SIGNING_ALLOWED=NO build
+```
+
+> **Note:** For App Store distribution, open `ios/TaskFlow.xcworkspace` in Xcode and configure your team/signing certificates.
+
 ### Using EAS Build
 
 If you have an Expo account with EAS Build credits:
@@ -75,13 +93,19 @@ If you have an Expo account with EAS Build credits:
 
 ## CI/CD with GitHub Actions
 
-This project includes a GitHub Actions workflow for building Android APKs locally:
+This project includes GitHub Actions workflows for building mobile apps locally:
 
-### Local Build (`.github/workflows/build-android-local.yml`)
+### Android Build (`.github/workflows/build-android-local.yml`)
 
-Builds directly on GitHub Actions runners without requiring an Expo account. Uses `expo prebuild` to generate native projects, then builds with Gradle.
+Builds Android APK directly on GitHub Actions runners (Ubuntu). Uses `expo prebuild` to generate native projects, then builds with Gradle.
 
-Triggered on pushes/PRs to main/master branches, or manually via workflow dispatch.
+### iOS Build (`.github/workflows/build-ios-local.yml`)
+
+Builds iOS app for Simulator on GitHub Actions runners (macOS). Uses `expo prebuild` to generate native projects, then builds with Xcode.
+
+> **Note:** The iOS workflow builds a Simulator-only `.app` bundle (no code signing required). For App Store distribution, you'll need to set up code signing with certificates and provisioning profiles.
+
+Both workflows are triggered on pushes/PRs to main/master branches, or manually via workflow dispatch.
 
 ## Environment Variables
 
