@@ -188,16 +188,20 @@ export function TaskFormModal({
       if (task) {
         // Update existing task
         const oldProjectId = task.project_id;
+        const isMovingProject = oldProjectId !== projectId;
+        
+        // First update task properties (without project_id - it's read-only in REST API)
         await apiClient.updateTask(task.id, {
           content: title.trim(),
           description: description.trim(),
-          project_id: projectId,
           priority,
           due_string: dueString || dueDate || undefined,
           labels: selectedLabels,
         });
-        // Pass old project ID if task was moved to a different project
-        if (oldProjectId !== projectId) {
+        
+        // If project changed, use Sync API to move the task
+        if (isMovingProject) {
+          await apiClient.moveTask(task.id, projectId);
           onSave(oldProjectId);
         } else {
           onSave();
@@ -237,10 +241,10 @@ export function TaskFormModal({
   }
 
   const priorityOptions = [
-    { value: 1, label: 'P4 (Low)', color: colors.muted },
-    { value: 2, label: 'P3', color: colors.primary },
-    { value: 3, label: 'P2', color: colors.warning },
     { value: 4, label: 'P1 (Urgent)', color: colors.error },
+    { value: 3, label: 'P2', color: colors.warning },
+    { value: 2, label: 'P3', color: colors.primary },
+    { value: 1, label: 'P4 (Low)', color: colors.muted },
   ];
 
   return (

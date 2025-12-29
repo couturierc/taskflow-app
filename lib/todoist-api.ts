@@ -5,8 +5,10 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import { v4 as uuidv4 } from 'uuid';
 
 const API_BASE_URL = 'https://api.todoist.com/rest/v2';
+const SYNC_API_URL = 'https://api.todoist.com/sync/v9/sync';
 
 export interface TodoistProject {
   id: string;
@@ -101,8 +103,10 @@ export class TodoistAPIError extends Error {
  */
 export class TodoistAPI {
   private client: AxiosInstance;
+  private apiToken: string;
 
   constructor(apiToken: string) {
+    this.apiToken = apiToken;
     this.client = axios.create({
       baseURL: API_BASE_URL,
       headers: {
@@ -254,11 +258,11 @@ export class TodoistAPI {
 
   /**
    * Update an existing task
+   * Note: project_id is read-only in REST API v2, use moveTask() to move a task
    */
   async updateTask(taskId: string, updates: {
     content?: string;
     description?: string;
-    project_id?: string;
     labels?: string[];
     priority?: 1 | 2 | 3 | 4;
     due_string?: string;
@@ -270,6 +274,46 @@ export class TodoistAPI {
     try {
       const response = await this.client.post(`/tasks/${taskId}`, updates);
       return response.data;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
+   * Move a task to a different project using Sync API
+   * The REST API v2 does not support changing project_id, so we use the Sync API
+   */
+  async moveTask(taskId: string, projectId: string): Promise<boolean> {
+    try {
+      const response = await axios.post(
+        SYNC_API_URL,
+        {
+          commands: JSON.stringify([
+            {
+              type: 'item_move',
+              uuid: uuidv4(),
+              args: {
+                id: taskId,
+                project_id: projectId,
+              },
+            },
+          ]),
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiToken}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }
+      );
+      
+      // Check if the command was successful
+      const syncStatus = response.data?.sync_status;
+      if (syncStatus) {
+        const commandResults = Object.values(syncStatus);
+        return commandResults.every((result: any) => result === 'ok');
+      }
+      return true;
     } catch (error) {
       this.handleError(error);
     }

@@ -205,10 +205,10 @@ export default function TodayScreen() {
               {item.priority > 1 && (
                 <View 
                   className="px-2 py-1 rounded"
-                  style={{ backgroundColor: colors.warning + '20' }}
+                  style={{ backgroundColor: item.priority === 4 ? colors.error + '20' : item.priority === 3 ? colors.warning + '20' : colors.primary + '20' }}
                 >
-                  <Text className="text-xs font-medium" style={{ color: colors.warning }}>
-                    P{item.priority}
+                  <Text className="text-xs font-medium" style={{ color: item.priority === 4 ? colors.error : item.priority === 3 ? colors.warning : colors.primary }}>
+                    P{5 - item.priority}
                   </Text>
                 </View>
               )}
