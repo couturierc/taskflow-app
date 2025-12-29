@@ -1,0 +1,288 @@
+/**
+ * Inbox Screen
+ * 
+ * Displays all tasks in the Inbox project
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { View, Text, FlatList, TouchableOpacity, RefreshControl, Alert, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
+import { ScreenContainer } from '@/components/screen-container';
+import { useAuth } from '@/lib/auth-context';
+import { TodoistTask } from '@/lib/todoist-api';
+import { useColors } from '@/hooks/use-colors';
+import * as Haptics from 'expo-haptics';
+import { FloatingActionButton } from '@/components/floating-action-button';
+import { TaskFormModal } from '@/components/task-form-modal';
+import { SearchBar } from '@/components/search-bar';
+import { FilterModal, FilterOptions } from '@/components/filter-modal';
+import { TodoistProject, TodoistLabel } from '@/lib/todoist-api';
+import { LabelBadges } from '@/components/label-badges';
+
+export default function InboxScreen() {
+  const { apiClient, isAuthenticated } = useAuth();
+  const [tasks, setTasks] = useState<TodoistTask[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isTaskModalVisible, setIsTaskModalVisible] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<TodoistTask | null>(null);
+  const [inboxProjectId, setInboxProjectId] = useState<string | undefined>();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [filters, setFilters] = useState<FilterOptions>({ priority: null, projectId: null });
+  const [projects, setProjects] = useState<TodoistProject[]>([]);
+  const [labels, setLabels] = useState<TodoistLabel[]>([]);
+  const colors = useColors();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+    loadTasks();
+  }, [isAuthenticated]);
+
+  async function loadTasks() {
+    if (!apiClient) return;
+
+    try {
+      // Get inbox project ID, all projects, and labels
+      const [allProjects, inboxTasks, allLabels] = await Promise.all([
+        apiClient.getProjects(),
+        apiClient.getInboxTasks(),
+        apiClient.getLabels(),
+      ]);
+      
+      const inbox = allProjects.find(p => p.is_inbox_project);
+      if (inbox) {
+        setInboxProjectId(inbox.id);
+      }
+      
+      setProjects(allProjects);
+      setTasks(inboxTasks);
+      setLabels(allLabels);
+    } catch (error) {
+      console.error('Failed to load inbox tasks:', error);
+      Alert.alert('Error', 'Failed to load inbox tasks. Please try again.');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }
+
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    loadTasks();
+  }, [apiClient]);
+
+  function handleTaskPress(task: TodoistTask) {
+    setSelectedTask(task);
+    setIsTaskModalVisible(true);
+  }
+
+  async function handleToggleComplete(task: TodoistTask) {
+    if (!apiClient) return;
+
+    // Optimistic update
+    setTasks(prev => prev.map(t => 
+      t.id === task.id ? { ...t, is_completed: !t.is_completed } : t
+    ));
+
+    try {
+      if (task.is_completed) {
+        await apiClient.reopenTask(task.id);
+      } else {
+        await apiClient.closeTask(task.id);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      // Reload to get fresh data
+      await loadTasks();
+    } catch (error) {
+      // Revert optimistic update on error
+      setTasks(prev => prev.map(t => 
+        t.id === task.id ? { ...t, is_completed: task.is_completed } : t
+      ));
+      Alert.alert('Error', 'Failed to update task. Please try again.');
+    }
+  }
+
+  // Filter and search tasks
+  const filteredTasks = tasks.filter(task => {
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesContent = task.content.toLowerCase().includes(query);
+      const matchesDescription = task.description?.toLowerCase().includes(query);
+      if (!matchesContent && !matchesDescription) return false;
+    }
+
+    // Priority filter
+    if (filters.priority !== null && task.priority !== filters.priority) {
+      return false;
+    }
+
+    // Project filter (not applicable for inbox, but keep for consistency)
+    if (filters.projectId !== null && task.project_id !== filters.projectId) {
+      return false;
+    }
+
+    return true;
+  });
+
+  function renderTask({ item }: { item: TodoistTask }) {
+    return (
+      <TouchableOpacity
+        className="bg-surface border border-border rounded-xl p-4 mb-3 active:opacity-70"
+        onPress={() => handleTaskPress(item)}
+      >
+        <View className="flex-row items-start gap-3">
+          {/* Checkbox */}
+          <TouchableOpacity
+            onPress={(e: any) => {
+              e.stopPropagation();
+              handleToggleComplete(item);
+            }}
+          >
+            <View 
+            className="w-6 h-6 rounded-full border-2 items-center justify-center mt-0.5"
+            style={{ 
+              borderColor: item.is_completed ? colors.success : colors.primary,
+              backgroundColor: item.is_completed ? colors.success : 'transparent'
+            }}
+          >
+              {item.is_completed && (
+                <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' }}>✓</Text>
+              )}
+            </View>
+          </TouchableOpacity>
+
+          {/* Task Content */}
+          <View className="flex-1">
+            <Text 
+              className="text-base text-foreground"
+              style={{ 
+                textDecorationLine: item.is_completed ? 'line-through' : 'none',
+                opacity: item.is_completed ? 0.5 : 1
+              }}
+            >
+              {item.content}
+            </Text>
+            
+            {item.description && (
+              <Text className="text-sm text-muted mt-1" numberOfLines={2}>
+                {item.description}
+              </Text>
+            )}
+
+            {/* Metadata */}
+            <View className="flex-row items-center gap-2 mt-2 flex-wrap">
+              {item.due && (
+                <View 
+                  className="px-2 py-1 rounded"
+                  style={{ backgroundColor: colors.muted + '20' }}
+                >
+                  <Text className="text-xs font-medium" style={{ color: colors.muted }}>
+                    {item.due.string}
+                  </Text>
+                </View>
+              )}
+              
+              {item.priority > 1 && (
+                <View 
+                  className="px-2 py-1 rounded"
+                  style={{ backgroundColor: colors.warning + '20' }}
+                >
+                  <Text className="text-xs font-medium" style={{ color: colors.warning }}>
+                    P{item.priority}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <LabelBadges labelNames={item.labels || []} labels={labels} />
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <ScreenContainer className="justify-center items-center">
+        <ActivityIndicator size="large" color={colors.primary} />
+      </ScreenContainer>
+    );
+  }
+
+  return (
+    <ScreenContainer>
+      <View className="flex-1 px-4 pt-6">
+        {/* Header */}
+        <View className="mb-4">
+          <Text className="text-3xl font-bold text-foreground">Inbox</Text>
+          {tasks.length > 0 && (
+            <Text className="text-sm text-muted mt-2">
+              {tasks.filter(t => !t.is_completed).length} tasks
+            </Text>
+          )}
+        </View>
+
+        {/* Search Bar */}
+        <SearchBar
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onFilterPress={() => setIsFilterModalVisible(true)}
+        />
+
+        {/* Task List */}
+        <FlatList
+          data={filteredTasks}
+          renderItem={renderTask}
+          keyExtractor={item => item.id}
+          contentContainerStyle={{ paddingBottom: 20 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+            />
+          }
+          ListEmptyComponent={
+            <View className="items-center justify-center py-12">
+              <Text className="text-6xl mb-4">📥</Text>
+              <Text className="text-xl font-semibold text-foreground mb-2">Inbox is empty</Text>
+              <Text className="text-base text-muted text-center">
+                All your new tasks will appear here
+              </Text>
+            </View>
+          }
+        />
+
+        {/* FAB */}
+        <FloatingActionButton onPress={() => setIsTaskModalVisible(true)} />
+
+        {/* Task Form Modal */}
+        <TaskFormModal
+          visible={isTaskModalVisible}
+          onClose={() => {
+            setIsTaskModalVisible(false);
+            setSelectedTask(null);
+          }}
+          onSave={() => {
+            loadTasks();
+          }}
+          task={selectedTask}
+          defaultProjectId={inboxProjectId}
+        />
+
+        {/* Filter Modal */}
+        <FilterModal
+          visible={isFilterModalVisible}
+          onClose={() => setIsFilterModalVisible(false)}
+          filters={filters}
+          onFiltersChange={setFilters}
+          projects={projects}
+        />
+      </View>
+    </ScreenContainer>
+  );
+}
