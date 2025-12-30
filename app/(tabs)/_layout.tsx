@@ -63,12 +63,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="gearshape.fill" color={color} />,
         }}
       />
-      <Tabs.Screen
-        name="labels"
-        options={{
-          href: null, // Hide from tab bar, accessible via navigation
-        }}
-      />
     </Tabs>
   );
 }
