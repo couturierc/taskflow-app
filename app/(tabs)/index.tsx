@@ -38,6 +38,7 @@ export default function TodayScreen() {
   const [projects, setProjects] = useState<TodoistProject[]>([]);
   const [labels, setLabels] = useState<TodoistLabel[]>([]);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(new Set());
   const colors = useColors();
   const router = useRouter();
 
@@ -70,11 +71,42 @@ export default function TodayScreen() {
     if (!apiClient) return;
 
     try {
-      const [todayTasks, allProjects, allLabels] = await Promise.all([
-        apiClient.getTodayTasks(),
+      const [allTasks, allProjects, allLabels] = await Promise.all([
+        apiClient.getTasks(), // Get all tasks to include subtasks
         apiClient.getProjects(),
         apiClient.getLabels(),
       ]);
+      
+      // Filter to today/overdue tasks and their subtasks
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Find tasks due today or overdue
+      const todayTaskIds = new Set<string>();
+      allTasks.forEach(task => {
+        if (task.due) {
+          const dueDate = new Date(task.due.date);
+          dueDate.setHours(0, 0, 0, 0);
+          if (dueDate <= today) {
+            todayTaskIds.add(task.id);
+          }
+        }
+      });
+      
+      // Also include subtasks of today's tasks (recursively)
+      const includeSubtasks = (parentId: string) => {
+        allTasks.forEach(task => {
+          if (task.parent_id === parentId && !todayTaskIds.has(task.id)) {
+            todayTaskIds.add(task.id);
+            includeSubtasks(task.id); // Recurse for nested subtasks
+          }
+        });
+      };
+      todayTaskIds.forEach(id => includeSubtasks(id));
+      
+      // Filter to only today's tasks and their subtasks
+      const todayTasks = allTasks.filter(task => todayTaskIds.has(task.id));
+      
       setTasks(todayTasks);
       setProjects(allProjects);
       setLabels(allLabels);
@@ -156,7 +188,7 @@ export default function TodayScreen() {
   // Filter and search tasks
   // Organize tasks with subtasks
   const organizedTasks = organizeTasksWithSubtasks(tasks);
-  const flatTasks = flattenTasksWithSubtasks(organizedTasks);
+  const flatTasks = flattenTasksWithSubtasks(organizedTasks, collapsedTasks);
   
   const filteredTasks = flatTasks.filter(task => {
     // Search filter
@@ -188,6 +220,19 @@ export default function TodayScreen() {
     }
     return true;
   }) : [];
+
+  function toggleCollapse(taskId: string) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCollapsedTasks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      return newSet;
+    });
+  }
 
   function renderCompletedTask(item: TodoistCompletedTask) {
     return (
@@ -239,15 +284,55 @@ export default function TodayScreen() {
     const isOverdue = item.due && new Date(item.due.date) < new Date(new Date().setHours(0, 0, 0, 0));
     
     const progress = hasSubtasks(item) ? calculateSubtaskProgress(item) : null;
-    const indentWidth = item.level * 24; // 24px per level
+    const indentWidth = item.level * 20; // 20px per level
+    const project = projects.find(p => p.id === item.project_id);
+    const isSubtask = item.level > 0;
+    const hasChildren = item.children.length > 0;
+    const isCollapsed = collapsedTasks.has(item.id);
     
     return (
-      <View style={{ marginLeft: indentWidth }}>
+      <View className="flex-row">
+        {/* Indent spacer with vertical line for subtasks */}
+        {isSubtask && (
+          <View style={{ width: indentWidth }} className="flex-row">
+            {Array.from({ length: item.level }).map((_, i) => (
+              <View 
+                key={i} 
+                style={{ 
+                  width: 20, 
+                  borderLeftWidth: i === item.level - 1 ? 2 : 0,
+                  borderLeftColor: colors.border,
+                  marginLeft: 8,
+                }}
+              />
+            ))}
+          </View>
+        )}
+        <View className="flex-1">
         <TouchableOpacity
           className="bg-surface border border-border rounded-xl p-4 mb-3 active:opacity-70"
+          style={{
+            borderLeftWidth: isSubtask ? 3 : 1,
+            borderLeftColor: isSubtask ? colors.primary + '60' : colors.border,
+          }}
           onPress={() => handleTaskPress(item)}
         >
           <View className="flex-row items-start gap-3">
+          {/* Collapse/Expand button for tasks with children */}
+          {hasChildren && (
+            <TouchableOpacity
+              onPress={(e: any) => {
+                e.stopPropagation();
+                toggleCollapse(item.id);
+              }}
+              className="w-6 h-6 items-center justify-center mt-0.5"
+            >
+              <Text style={{ color: colors.muted, fontSize: 12 }}>
+                {isCollapsed ? '▶' : '▼'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          
           {/* Checkbox */}
           <TouchableOpacity
             onPress={(e: any) => {
@@ -270,12 +355,26 @@ export default function TodayScreen() {
 
           {/* Task Content */}
           <View className="flex-1">
-            <View
-              style={{ 
-                opacity: item.is_completed ? 0.5 : 1
-              }}
-            >
-              <MarkdownText content={item.content} variant="title" />
+            <View className="flex-row items-center gap-2">
+              <View
+                style={{ 
+                  opacity: item.is_completed ? 0.5 : 1,
+                  flex: 1,
+                }}
+              >
+                <MarkdownText content={item.content} variant="title" />
+              </View>
+              {/* Collapsed indicator showing hidden count */}
+              {hasChildren && isCollapsed && (
+                <View 
+                  className="px-2 py-0.5 rounded"
+                  style={{ backgroundColor: colors.primary + '20' }}
+                >
+                  <Text className="text-xs font-medium" style={{ color: colors.primary }}>
+                    +{item.children.length}
+                  </Text>
+                </View>
+              )}
             </View>
             
             {item.description && (
@@ -286,6 +385,22 @@ export default function TodayScreen() {
 
             {/* Metadata */}
             <View className="flex-row items-center gap-2 mt-2 flex-wrap">
+              {/* Project Badge */}
+              {project && !project.is_inbox_project && (
+                <View 
+                  className="px-2 py-1 rounded flex-row items-center gap-1"
+                  style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
+                >
+                  <View 
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: project.color || colors.primary }}
+                  />
+                  <Text className="text-xs font-medium" style={{ color: colors.foreground }}>
+                    {project.name}
+                  </Text>
+                </View>
+              )}
+              
               {item.due && (
                 <View 
                   className="px-2 py-1 rounded flex-row items-center gap-1"
@@ -337,6 +452,7 @@ export default function TodayScreen() {
         </View>
       </TouchableOpacity>
       </View>
+      </View>
     );
   }
 
@@ -371,22 +487,54 @@ export default function TodayScreen() {
           onFilterPress={() => setIsFilterModalVisible(true)}
         />
 
-        {/* Show/Hide Completed Toggle */}
-        <TouchableOpacity
-          className="flex-row items-center justify-between bg-surface border border-border rounded-xl px-4 py-3 mb-4"
-          onPress={() => setShowCompleted(!showCompleted)}
-        >
-          <Text className="text-base text-foreground">Show completed tasks</Text>
-          <View
-            className="w-12 h-7 rounded-full p-1"
-            style={{ backgroundColor: showCompleted ? colors.primary : colors.border }}
+        {/* Toggle Row: Show Completed & Show Subtasks */}
+        <View className="flex-row gap-2 mb-4">
+          {/* Show/Hide Completed Toggle */}
+          <TouchableOpacity
+            className="flex-1 flex-row items-center justify-between bg-surface border border-border rounded-xl px-3 py-3"
+            onPress={() => setShowCompleted(!showCompleted)}
           >
+            <Text className="text-sm text-foreground">Show completed</Text>
             <View
-              className="w-5 h-5 rounded-full bg-white"
-              style={{ marginLeft: showCompleted ? 20 : 0 }}
-            />
-          </View>
-        </TouchableOpacity>
+              className="w-10 h-6 rounded-full p-0.5"
+              style={{ backgroundColor: showCompleted ? colors.primary : colors.border }}
+            >
+              <View
+                className="w-5 h-5 rounded-full bg-white"
+                style={{ marginLeft: showCompleted ? 16 : 0 }}
+              />
+            </View>
+          </TouchableOpacity>
+
+          {/* Show/Hide Subtasks Toggle */}
+          <TouchableOpacity
+            className="flex-1 flex-row items-center justify-between bg-surface border border-border rounded-xl px-3 py-3"
+            onPress={() => {
+              if (collapsedTasks.size === 0) {
+                // Collapse all - find all tasks with children
+                const allParentIds = new Set<string>();
+                flattenTasksWithSubtasks(organizedTasks).forEach(t => {
+                  if (t.children.length > 0) allParentIds.add(t.id);
+                });
+                setCollapsedTasks(allParentIds);
+              } else {
+                // Expand all
+                setCollapsedTasks(new Set());
+              }
+            }}
+          >
+            <Text className="text-sm text-foreground">Show subtasks</Text>
+            <View
+              className="w-10 h-6 rounded-full p-0.5"
+              style={{ backgroundColor: collapsedTasks.size === 0 ? colors.primary : colors.border }}
+            >
+              <View
+                className="w-5 h-5 rounded-full bg-white"
+                style={{ marginLeft: collapsedTasks.size === 0 ? 16 : 0 }}
+              />
+            </View>
+          </TouchableOpacity>
+        </View>
 
         {/* Task List */}
         <FlatList

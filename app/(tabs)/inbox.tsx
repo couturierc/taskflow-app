@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { useAuth } from '@/lib/auth-context';
 import { TodoistTask, TodoistCompletedTask } from '@/lib/todoist-api';
+import { organizeTasksWithSubtasks, flattenTasksWithSubtasks, TaskWithChildren, calculateSubtaskProgress, hasSubtasks } from '@/lib/subtask-utils';
 import { useColors } from '@/hooks/use-colors';
 import * as Haptics from 'expo-haptics';
 import { FloatingActionButton } from '@/components/floating-action-button';
@@ -34,6 +35,7 @@ export default function InboxScreen() {
   const [projects, setProjects] = useState<TodoistProject[]>([]);
   const [labels, setLabels] = useState<TodoistLabel[]>([]);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(new Set());
   const colors = useColors();
   const router = useRouter();
 
@@ -172,6 +174,10 @@ export default function InboxScreen() {
     return true;
   });
 
+  // Organize tasks with subtask hierarchy
+  const organizedTasks = organizeTasksWithSubtasks(filteredTasks);
+  const flatTasks = flattenTasksWithSubtasks(organizedTasks, collapsedTasks);
+
   // Filter completed tasks for display
   const filteredCompletedTasks = showCompleted ? completedTasks.filter(task => {
     if (searchQuery) {
@@ -181,108 +187,211 @@ export default function InboxScreen() {
     return true;
   }) : [];
 
-  // Combined task list type for display
-  type DisplayTask = (TodoistTask & { isCompletedTask?: false }) | (TodoistCompletedTask & { isCompletedTask: true });
-  
-  const displayTasks: DisplayTask[] = [
-    ...filteredTasks.map(t => ({ ...t, isCompletedTask: false as const })),
-    ...filteredCompletedTasks.map(t => ({ ...t, isCompletedTask: true as const })),
-  ];
+  function toggleCollapse(taskId: string) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCollapsedTasks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      return newSet;
+    });
+  }
 
-  function renderTask({ item }: { item: DisplayTask }) {
-    const isCompleted = item.isCompletedTask;
+  function renderTask({ item }: { item: TaskWithChildren }) {
+    const indentWidth = item.level * 20; // 20px per level
+    const isSubtask = item.level > 0;
+    const hasChildren = item.children.length > 0;
+    const isCollapsed = collapsedTasks.has(item.id);
+    const progress = hasSubtasks(item) ? calculateSubtaskProgress(item) : null;
     
     return (
+      <View className="flex-row">
+        {/* Indent spacer with vertical line for subtasks */}
+        {isSubtask && (
+          <View style={{ width: indentWidth }} className="flex-row">
+            {Array.from({ length: item.level }).map((_, i) => (
+              <View 
+                key={i} 
+                style={{ 
+                  width: 20, 
+                  borderLeftWidth: i === item.level - 1 ? 2 : 0,
+                  borderLeftColor: colors.border,
+                  marginLeft: 8,
+                }}
+              />
+            ))}
+          </View>
+        )}
+        <View className="flex-1">
+          <TouchableOpacity
+            className="bg-surface border border-border rounded-xl p-4 mb-3 active:opacity-70"
+            style={{
+              borderLeftWidth: isSubtask ? 3 : 1,
+              borderLeftColor: isSubtask ? colors.primary + '60' : colors.border,
+            }}
+            onPress={() => handleTaskPress(item)}
+          >
+            <View className="flex-row items-start gap-3">
+              {/* Collapse/Expand button for tasks with children */}
+              {hasChildren && (
+                <TouchableOpacity
+                  onPress={(e: any) => {
+                    e.stopPropagation();
+                    toggleCollapse(item.id);
+                  }}
+                  className="w-6 h-6 items-center justify-center mt-0.5"
+                >
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>
+                    {isCollapsed ? '▶' : '▼'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              
+              {/* Checkbox */}
+              <TouchableOpacity
+                onPress={(e: any) => {
+                  e.stopPropagation();
+                  handleToggleComplete(item);
+                }}
+              >
+                <View 
+                  className="w-6 h-6 rounded-full border-2 items-center justify-center mt-0.5"
+                  style={{ 
+                    borderColor: item.is_completed ? colors.success : colors.primary,
+                    backgroundColor: item.is_completed ? colors.success : 'transparent'
+                  }}
+                >
+                  {item.is_completed && (
+                    <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' }}>✓</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              {/* Task Content */}
+              <View className="flex-1">
+                <View className="flex-row items-center gap-2">
+                  <Text 
+                    className="text-base text-foreground flex-1"
+                    style={{ 
+                      textDecorationLine: item.is_completed ? 'line-through' : 'none',
+                      opacity: item.is_completed ? 0.6 : 1
+                    }}
+                  >
+                    {item.content}
+                  </Text>
+                  {/* Collapsed indicator showing hidden count */}
+                  {hasChildren && isCollapsed && (
+                    <View 
+                      className="px-2 py-0.5 rounded"
+                      style={{ backgroundColor: colors.primary + '20' }}
+                    >
+                      <Text className="text-xs font-medium" style={{ color: colors.primary }}>
+                        +{item.children.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                
+                {item.description && (
+                  <Text className="text-sm text-muted mt-1" numberOfLines={2}>
+                    {item.description}
+                  </Text>
+                )}
+
+                {/* Metadata */}
+                <View className="flex-row items-center gap-2 mt-2 flex-wrap">
+                  {item.due && (
+                    <View 
+                      className="px-2 py-1 rounded"
+                      style={{ backgroundColor: colors.muted + '20' }}
+                    >
+                      <Text className="text-xs font-medium" style={{ color: colors.muted }}>
+                        {item.due.string}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {item.priority > 1 && (
+                    <View 
+                      className="px-2 py-1 rounded"
+                      style={{ backgroundColor: item.priority === 4 ? colors.error + '20' : item.priority === 3 ? colors.warning + '20' : colors.primary + '20' }}
+                    >
+                      <Text className="text-xs font-medium" style={{ color: item.priority === 4 ? colors.error : item.priority === 3 ? colors.warning : colors.primary }}>
+                        P{5 - item.priority}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <LabelBadges labelNames={item.labels || []} labels={labels} />
+                
+                {/* Subtask Progress */}
+                {progress && progress.total > 0 && (
+                  <View className="flex-row items-center gap-2 mt-2">
+                    <View className="flex-1 h-2 bg-border rounded-full overflow-hidden">
+                      <View 
+                        className="h-full rounded-full"
+                        style={{ 
+                          width: `${progress.percentage}%`,
+                          backgroundColor: progress.percentage === 100 ? colors.success : colors.primary
+                        }}
+                      />
+                    </View>
+                    <Text className="text-xs text-muted">
+                      {progress.completed}/{progress.total}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  function renderCompletedTask(item: TodoistCompletedTask) {
+    return (
       <TouchableOpacity
+        key={`completed-${item.id}`}
         className="bg-surface border border-border rounded-xl p-4 mb-3 active:opacity-70"
-        onPress={() => {
-          if (isCompleted) {
-            handleUncompleteTask(item as TodoistCompletedTask);
-          } else {
-            handleTaskPress(item as TodoistTask);
-          }
-        }}
-        style={{ opacity: isCompleted ? 0.6 : 1 }}
+        style={{ opacity: 0.6 }}
+        onPress={() => handleUncompleteTask(item)}
       >
         <View className="flex-row items-start gap-3">
-          {/* Checkbox */}
           <TouchableOpacity
             onPress={(e: any) => {
               e.stopPropagation();
-              if (isCompleted) {
-                handleUncompleteTask(item as TodoistCompletedTask);
-              } else {
-                handleToggleComplete(item as TodoistTask);
-              }
+              handleUncompleteTask(item);
             }}
           >
             <View 
-            className="w-6 h-6 rounded-full border-2 items-center justify-center mt-0.5"
-            style={{ 
-              borderColor: isCompleted ? colors.success : colors.primary,
-              backgroundColor: isCompleted ? colors.success : 'transparent'
-            }}
-          >
-              {isCompleted && (
-                <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' }}>✓</Text>
-              )}
+              className="w-6 h-6 rounded-full border-2 items-center justify-center mt-0.5"
+              style={{ 
+                borderColor: colors.success,
+                backgroundColor: colors.success
+              }}
+            >
+              <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' }}>✓</Text>
             </View>
           </TouchableOpacity>
-
-          {/* Task Content */}
           <View className="flex-1">
             <Text 
               className="text-base text-foreground"
-              style={{ 
-                textDecorationLine: isCompleted ? 'line-through' : 'none',
-                opacity: isCompleted ? 0.6 : 1
-              }}
+              style={{ textDecorationLine: 'line-through', opacity: 0.6 }}
             >
               {item.content}
             </Text>
-            
-            {!isCompleted && (item as TodoistTask).description && (
-              <Text className="text-sm text-muted mt-1" numberOfLines={2}>
-                {(item as TodoistTask).description}
+            <View 
+              className="px-2 py-1 rounded self-start mt-2"
+              style={{ backgroundColor: colors.success + '20' }}
+            >
+              <Text className="text-xs font-medium" style={{ color: colors.success }}>
+                Tap to reopen
               </Text>
-            )}
-
-            {/* Metadata */}
-            <View className="flex-row items-center gap-2 mt-2 flex-wrap">
-              {isCompleted && (
-                <View 
-                  className="px-2 py-1 rounded"
-                  style={{ backgroundColor: colors.success + '20' }}
-                >
-                  <Text className="text-xs font-medium" style={{ color: colors.success }}>
-                    Tap to reopen
-                  </Text>
-                </View>
-              )}
-              
-              {!isCompleted && (item as TodoistTask).due && (
-                <View 
-                  className="px-2 py-1 rounded"
-                  style={{ backgroundColor: colors.muted + '20' }}
-                >
-                  <Text className="text-xs font-medium" style={{ color: colors.muted }}>
-                    {(item as TodoistTask).due!.string}
-                  </Text>
-                </View>
-              )}
-              
-              {!isCompleted && (item as TodoistTask).priority > 1 && (
-                <View 
-                  className="px-2 py-1 rounded"
-                  style={{ backgroundColor: (item as TodoistTask).priority === 4 ? colors.error + '20' : (item as TodoistTask).priority === 3 ? colors.warning + '20' : colors.primary + '20' }}
-                >
-                  <Text className="text-xs font-medium" style={{ color: (item as TodoistTask).priority === 4 ? colors.error : (item as TodoistTask).priority === 3 ? colors.warning : colors.primary }}>
-                    P{5 - (item as TodoistTask).priority}
-                  </Text>
-                </View>
-              )}
             </View>
-            {!isCompleted && <LabelBadges labelNames={(item as TodoistTask).labels || []} labels={labels} />}
           </View>
         </View>
       </TouchableOpacity>
@@ -317,28 +426,60 @@ export default function InboxScreen() {
           onFilterPress={() => setIsFilterModalVisible(true)}
         />
 
-        {/* Show/Hide Completed Toggle */}
-        <TouchableOpacity
-          className="flex-row items-center justify-between bg-surface border border-border rounded-xl px-4 py-3 mb-4"
-          onPress={() => setShowCompleted(!showCompleted)}
-        >
-          <Text className="text-base text-foreground">Show completed tasks</Text>
-          <View
-            className="w-12 h-7 rounded-full p-1"
-            style={{ backgroundColor: showCompleted ? colors.primary : colors.border }}
+        {/* Toggle Row: Show Completed & Show Subtasks */}
+        <View className="flex-row gap-2 mb-4">
+          {/* Show/Hide Completed Toggle */}
+          <TouchableOpacity
+            className="flex-1 flex-row items-center justify-between bg-surface border border-border rounded-xl px-3 py-3"
+            onPress={() => setShowCompleted(!showCompleted)}
           >
+            <Text className="text-sm text-foreground">Show completed</Text>
             <View
-              className="w-5 h-5 rounded-full bg-white"
-              style={{ marginLeft: showCompleted ? 20 : 0 }}
-            />
-          </View>
-        </TouchableOpacity>
+              className="w-10 h-6 rounded-full p-0.5"
+              style={{ backgroundColor: showCompleted ? colors.primary : colors.border }}
+            >
+              <View
+                className="w-5 h-5 rounded-full bg-white"
+                style={{ marginLeft: showCompleted ? 16 : 0 }}
+              />
+            </View>
+          </TouchableOpacity>
+
+          {/* Show/Hide Subtasks Toggle */}
+          <TouchableOpacity
+            className="flex-1 flex-row items-center justify-between bg-surface border border-border rounded-xl px-3 py-3"
+            onPress={() => {
+              if (collapsedTasks.size === 0) {
+                // Collapse all - find all tasks with children
+                const allParentIds = new Set<string>();
+                flattenTasksWithSubtasks(organizedTasks).forEach(t => {
+                  if (t.children.length > 0) allParentIds.add(t.id);
+                });
+                setCollapsedTasks(allParentIds);
+              } else {
+                // Expand all
+                setCollapsedTasks(new Set());
+              }
+            }}
+          >
+            <Text className="text-sm text-foreground">Show subtasks</Text>
+            <View
+              className="w-10 h-6 rounded-full p-0.5"
+              style={{ backgroundColor: collapsedTasks.size === 0 ? colors.primary : colors.border }}
+            >
+              <View
+                className="w-5 h-5 rounded-full bg-white"
+                style={{ marginLeft: collapsedTasks.size === 0 ? 16 : 0 }}
+              />
+            </View>
+          </TouchableOpacity>
+        </View>
 
         {/* Task List */}
         <FlatList
-          data={displayTasks}
+          data={flatTasks}
           renderItem={renderTask}
-          keyExtractor={item => item.isCompletedTask ? `completed-${item.id}` : item.id}
+          keyExtractor={item => item.id}
           contentContainerStyle={{ paddingBottom: 20 }}
           refreshControl={
             <RefreshControl
@@ -347,14 +488,26 @@ export default function InboxScreen() {
               tintColor={colors.primary}
             />
           }
+          ListFooterComponent={
+            filteredCompletedTasks.length > 0 ? (
+              <View className="mt-4">
+                <Text className="text-lg font-semibold text-muted mb-3">
+                  Completed ({filteredCompletedTasks.length})
+                </Text>
+                {filteredCompletedTasks.map(task => renderCompletedTask(task))}
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
-            <View className="items-center justify-center py-12">
-              <Text className="text-6xl mb-4">📥</Text>
-              <Text className="text-xl font-semibold text-foreground mb-2">Inbox is empty</Text>
-              <Text className="text-base text-muted text-center">
-                All your new tasks will appear here
-              </Text>
-            </View>
+            filteredCompletedTasks.length === 0 ? (
+              <View className="items-center justify-center py-12">
+                <Text className="text-6xl mb-4">📥</Text>
+                <Text className="text-xl font-semibold text-foreground mb-2">Inbox is empty</Text>
+                <Text className="text-base text-muted text-center">
+                  All your new tasks will appear here
+                </Text>
+              </View>
+            ) : null
           }
         />
 
