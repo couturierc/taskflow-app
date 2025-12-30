@@ -93,19 +93,39 @@ If you have an Expo account with EAS Build credits:
 
 ## CI/CD with GitHub Actions
 
-This project includes GitHub Actions workflows for building mobile apps locally:
+This project includes GitHub Actions workflows for building and releasing mobile apps:
 
-### Android Build (`.github/workflows/build-android-local.yml`)
+### Development Builds
 
-Builds Android APK directly on GitHub Actions runners (Ubuntu). Uses `expo prebuild` to generate native projects, then builds with Gradle.
+- **Android** (`.github/workflows/build-android-local.yml`): Builds APK on Ubuntu runners
+- **iOS** (`.github/workflows/build-ios-local.yml`): Builds Simulator app on macOS runners
 
-### iOS Build (`.github/workflows/build-ios-local.yml`)
+These workflows run on pushes/PRs to main/master branches.
 
-Builds iOS app for Simulator on GitHub Actions runners (macOS). Uses `expo prebuild` to generate native projects, then builds with Xcode.
+### Release Workflow (`.github/workflows/release.yml`)
 
-> **Note:** The iOS workflow builds a Simulator-only `.app` bundle (no code signing required). For App Store distribution, you'll need to set up code signing with certificates and provisioning profiles.
+Creates GitHub Releases with versioned builds for both platforms. Triggered by:
+- Pushing a version tag: `git tag v1.1.0 && git push origin v1.1.0`
+- Manual workflow dispatch with version input
 
-Both workflows are triggered on pushes/PRs to main/master branches, or manually via workflow dispatch.
+### Creating a Release
+
+```bash
+# Bump version (updates version.json and package.json)
+pnpm version:bump patch  # 1.1.0 -> 1.1.1
+pnpm version:bump minor  # 1.1.0 -> 1.2.0
+pnpm version:bump major  # 1.1.0 -> 2.0.0
+
+# Commit and tag
+git add version.json package.json
+git commit -m "chore: bump version to 1.1.1"
+git tag v1.1.1
+git push origin master --tags
+```
+
+The release workflow will automatically build both platforms and create a GitHub Release with the APK and iOS Simulator builds attached.
+
+> **Note:** iOS builds are Simulator-only (no code signing). For App Store distribution, configure signing in Xcode.
 
 ## Environment Variables
 
@@ -153,6 +173,7 @@ JWT_SECRET=your_jwt_secret
 | `pnpm test` | Run tests with Vitest |
 | `pnpm lint` | Run ESLint |
 | `pnpm check` | TypeScript type checking |
+| `pnpm version:bump` | Bump app version (patch/minor/major) |
 
 ## License
 

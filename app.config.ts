@@ -1,11 +1,12 @@
 // Load environment variables with proper priority (system > .env)
 import "./scripts/load-env.js";
 import type { ExpoConfig } from "expo/config";
+import packageJson from "./package.json";
 
 const config: ExpoConfig = {
   name: "TaskFlow",
   slug: "taskflow",
-  version: "1.0.8",
+  version: packageJson.version,
   orientation: "portrait",
   icon: "./assets/images/icon.png",
   scheme: "taskflow",
