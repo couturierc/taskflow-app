@@ -9,7 +9,7 @@ import { View, Text, FlatList, TouchableOpacity, RefreshControl, Alert, Activity
 import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { useAuth } from '@/lib/auth-context';
-import { TodoistTask } from '@/lib/todoist-api';
+import { TodoistTask, TodoistCompletedTask } from '@/lib/todoist-api';
 import { useColors } from '@/hooks/use-colors';
 import * as Haptics from 'expo-haptics';
 import { FloatingActionButton } from '@/components/floating-action-button';
@@ -22,6 +22,7 @@ import { LabelBadges } from '@/components/label-badges';
 export default function InboxScreen() {
   const { apiClient, isAuthenticated } = useAuth();
   const [tasks, setTasks] = useState<TodoistTask[]>([]);
+  const [completedTasks, setCompletedTasks] = useState<TodoistCompletedTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTaskModalVisible, setIsTaskModalVisible] = useState(false);
@@ -42,6 +43,26 @@ export default function InboxScreen() {
     }
     loadTasks();
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (showCompleted && inboxProjectId && apiClient) {
+      loadCompletedTasks();
+    }
+  }, [showCompleted, inboxProjectId]);
+
+  async function loadCompletedTasks() {
+    if (!apiClient || !inboxProjectId) return;
+
+    try {
+      const completed = await apiClient.getCompletedTasks({ 
+        project_id: inboxProjectId,
+        limit: 50 
+      });
+      setCompletedTasks(completed);
+    } catch (error) {
+      console.error('Failed to load completed tasks:', error);
+    }
+  }
 
   async function loadTasks() {
     if (!apiClient) return;
@@ -109,11 +130,6 @@ export default function InboxScreen() {
 
   // Filter and search tasks
   const filteredTasks = tasks.filter(task => {
-    // Hide completed tasks unless showCompleted is enabled
-    if (!showCompleted && task.is_completed) {
-      return false;
-    }
-
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -135,28 +151,52 @@ export default function InboxScreen() {
     return true;
   });
 
-  function renderTask({ item }: { item: TodoistTask }) {
+  // Filter completed tasks for display
+  const filteredCompletedTasks = showCompleted ? completedTasks.filter(task => {
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      if (!task.content.toLowerCase().includes(query)) return false;
+    }
+    return true;
+  }) : [];
+
+  // Combined task list type for display
+  type DisplayTask = (TodoistTask & { isCompletedTask?: false }) | (TodoistCompletedTask & { isCompletedTask: true });
+  
+  const displayTasks: DisplayTask[] = [
+    ...filteredTasks.map(t => ({ ...t, isCompletedTask: false as const })),
+    ...filteredCompletedTasks.map(t => ({ ...t, isCompletedTask: true as const })),
+  ];
+
+  function renderTask({ item }: { item: DisplayTask }) {
+    const isCompleted = item.isCompletedTask;
+    
     return (
       <TouchableOpacity
         className="bg-surface border border-border rounded-xl p-4 mb-3 active:opacity-70"
-        onPress={() => handleTaskPress(item)}
+        onPress={() => !isCompleted && handleTaskPress(item as TodoistTask)}
+        disabled={isCompleted}
+        style={{ opacity: isCompleted ? 0.6 : 1 }}
       >
         <View className="flex-row items-start gap-3">
           {/* Checkbox */}
           <TouchableOpacity
             onPress={(e: any) => {
               e.stopPropagation();
-              handleToggleComplete(item);
+              if (!isCompleted) {
+                handleToggleComplete(item as TodoistTask);
+              }
             }}
+            disabled={isCompleted}
           >
             <View 
             className="w-6 h-6 rounded-full border-2 items-center justify-center mt-0.5"
             style={{ 
-              borderColor: item.is_completed ? colors.success : colors.primary,
-              backgroundColor: item.is_completed ? colors.success : 'transparent'
+              borderColor: isCompleted ? colors.success : colors.primary,
+              backgroundColor: isCompleted ? colors.success : 'transparent'
             }}
           >
-              {item.is_completed && (
+              {isCompleted && (
                 <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' }}>✓</Text>
               )}
             </View>
@@ -167,44 +207,55 @@ export default function InboxScreen() {
             <Text 
               className="text-base text-foreground"
               style={{ 
-                textDecorationLine: item.is_completed ? 'line-through' : 'none',
-                opacity: item.is_completed ? 0.5 : 1
+                textDecorationLine: isCompleted ? 'line-through' : 'none',
+                opacity: isCompleted ? 0.6 : 1
               }}
             >
               {item.content}
             </Text>
             
-            {item.description && (
+            {!isCompleted && (item as TodoistTask).description && (
               <Text className="text-sm text-muted mt-1" numberOfLines={2}>
-                {item.description}
+                {(item as TodoistTask).description}
               </Text>
             )}
 
             {/* Metadata */}
             <View className="flex-row items-center gap-2 mt-2 flex-wrap">
-              {item.due && (
+              {isCompleted && (
+                <View 
+                  className="px-2 py-1 rounded"
+                  style={{ backgroundColor: colors.success + '20' }}
+                >
+                  <Text className="text-xs font-medium" style={{ color: colors.success }}>
+                    Completed
+                  </Text>
+                </View>
+              )}
+              
+              {!isCompleted && (item as TodoistTask).due && (
                 <View 
                   className="px-2 py-1 rounded"
                   style={{ backgroundColor: colors.muted + '20' }}
                 >
                   <Text className="text-xs font-medium" style={{ color: colors.muted }}>
-                    {item.due.string}
+                    {(item as TodoistTask).due!.string}
                   </Text>
                 </View>
               )}
               
-              {item.priority > 1 && (
+              {!isCompleted && (item as TodoistTask).priority > 1 && (
                 <View 
                   className="px-2 py-1 rounded"
-                  style={{ backgroundColor: item.priority === 4 ? colors.error + '20' : item.priority === 3 ? colors.warning + '20' : colors.primary + '20' }}
+                  style={{ backgroundColor: (item as TodoistTask).priority === 4 ? colors.error + '20' : (item as TodoistTask).priority === 3 ? colors.warning + '20' : colors.primary + '20' }}
                 >
-                  <Text className="text-xs font-medium" style={{ color: item.priority === 4 ? colors.error : item.priority === 3 ? colors.warning : colors.primary }}>
-                    P{5 - item.priority}
+                  <Text className="text-xs font-medium" style={{ color: (item as TodoistTask).priority === 4 ? colors.error : (item as TodoistTask).priority === 3 ? colors.warning : colors.primary }}>
+                    P{5 - (item as TodoistTask).priority}
                   </Text>
                 </View>
               )}
             </View>
-            <LabelBadges labelNames={item.labels || []} labels={labels} />
+            {!isCompleted && <LabelBadges labelNames={(item as TodoistTask).labels || []} labels={labels} />}
           </View>
         </View>
       </TouchableOpacity>
@@ -258,9 +309,9 @@ export default function InboxScreen() {
 
         {/* Task List */}
         <FlatList
-          data={filteredTasks}
+          data={displayTasks}
           renderItem={renderTask}
-          keyExtractor={item => item.id}
+          keyExtractor={item => item.isCompletedTask ? `completed-${item.id}` : item.id}
           contentContainerStyle={{ paddingBottom: 20 }}
           refreshControl={
             <RefreshControl

@@ -19,6 +19,11 @@ const MAPPING = {
   "paperplane.fill": "send",
   "chevron.left.forwardslash.chevron.right": "code",
   "chevron.right": "chevron-right",
+  "folder.fill": "folder",
+  "gearshape.fill": "settings",
+  "tray.fill": "inbox",
+  "checkmark.circle.fill": "check-circle",
+  "circle": "radio-button-unchecked",
 } as IconMapping;
 
 /**
