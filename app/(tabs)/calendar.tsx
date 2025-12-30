@@ -8,7 +8,7 @@ import { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { ScreenContainer } from '@/components/screen-container';
 import { useAuth } from '@/lib/auth-context';
-import { TodoistTask } from '@/lib/todoist-api';
+import { TodoistTask, TodoistCompletedTask } from '@/lib/todoist-api';
 import { useColors } from '@/hooks/use-colors';
 import { TaskFormModal } from '@/components/task-form-modal';
 import * as Haptics from 'expo-haptics';
@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 export default function CalendarScreen() {
   const { apiClient, isAuthenticated } = useAuth();
   const [tasks, setTasks] = useState<TodoistTask[]>([]);
+  const [completedTasks, setCompletedTasks] = useState<TodoistCompletedTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -29,15 +30,32 @@ export default function CalendarScreen() {
     if (isAuthenticated) {
       loadTasks();
     }
-  }, [isAuthenticated, showCompleted]);
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (showCompleted && apiClient) {
+      loadCompletedTasks();
+    }
+  }, [showCompleted]);
+
+  async function loadCompletedTasks() {
+    if (!apiClient) return;
+
+    try {
+      const completed = await apiClient.getCompletedTasks({ limit: 100 });
+      setCompletedTasks(completed);
+    } catch (error) {
+      console.error('Failed to load completed tasks:', error);
+    }
+  }
 
   async function loadTasks() {
     if (!apiClient) return;
 
     try {
       const allTasks = await apiClient.getTasks();
-      // Filter based on showCompleted state - keep all tasks with due dates
-      setTasks(allTasks.filter(task => task.due && (showCompleted || !task.is_completed)));
+      // Keep all tasks with due dates
+      setTasks(allTasks.filter(task => task.due));
     } catch (error) {
       console.error('Failed to load tasks:', error);
     } finally {
@@ -79,9 +97,33 @@ export default function CalendarScreen() {
         await apiClient.closeTask(task.id);
       }
       await loadTasks();
+      if (showCompleted) {
+        await loadCompletedTasks();
+      }
     } catch (error) {
       console.error('Failed to toggle task:', error);
       Alert.alert('Error', 'Failed to update task. Please try again.');
+    }
+  }
+
+  async function handleUncompleteTask(completedTask: TodoistCompletedTask) {
+    if (!apiClient) return;
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    // Optimistic update
+    setCompletedTasks(prev => prev.filter(t => t.task_id !== completedTask.task_id));
+    
+    try {
+      await apiClient.reopenTask(completedTask.task_id);
+      await loadTasks();
+      if (showCompleted) {
+        await loadCompletedTasks();
+      }
+    } catch (error) {
+      setCompletedTasks(prev => [...prev, completedTask]);
+      console.error('Failed to reopen task:', error);
+      Alert.alert('Error', 'Failed to reopen task. Please try again.');
     }
   }
 
@@ -111,6 +153,20 @@ export default function CalendarScreen() {
 
   function getTasksForDate(dateStr: string): TodoistTask[] {
     return tasks.filter(task => task.due?.date === dateStr);
+  }
+
+  function getCompletedTasksForDate(dateStr: string): TodoistCompletedTask[] {
+    if (!showCompleted) return [];
+    // Completed tasks have completed_at timestamp, extract date
+    return completedTasks.filter(task => {
+      if (!task.completed_at) return false;
+      const completedDate = task.completed_at.split('T')[0];
+      return completedDate === dateStr;
+    });
+  }
+
+  function hasTasksOnDate(dateStr: string): boolean {
+    return getTasksForDate(dateStr).length > 0 || getCompletedTasksForDate(dateStr).length > 0;
   }
 
   function isToday(day: number): boolean {
@@ -226,7 +282,7 @@ export default function CalendarScreen() {
 
               const dateStr = formatDate(day);
               const dateTasks = getTasksForDate(dateStr);
-              const hasTasksOnDate = dateTasks.length > 0;
+              const hasTasksOnDateFlag = hasTasksOnDate(dateStr);
               const isTodayDate = isToday(day);
               const isSelected = dateStr === selectedDate;
 
@@ -239,10 +295,10 @@ export default function CalendarScreen() {
                         ? colors.primary
                         : isTodayDate
                         ? colors.primary + '20'
-                        : hasTasksOnDate
+                        : hasTasksOnDateFlag
                         ? colors.surface
                         : 'transparent',
-                      borderWidth: hasTasksOnDate && !isSelected ? 1 : 0,
+                      borderWidth: hasTasksOnDateFlag && !isSelected ? 1 : 0,
                       borderColor: colors.border,
                     }}
                     onPress={() => handleDatePress(day)}
@@ -259,7 +315,7 @@ export default function CalendarScreen() {
                     >
                       {day}
                     </Text>
-                    {hasTasksOnDate && !isSelected && (
+                    {hasTasksOnDateFlag && !isSelected && (
                       <View
                         className="w-1 h-1 rounded-full mt-1"
                         style={{ backgroundColor: colors.primary }}
@@ -278,12 +334,13 @@ export default function CalendarScreen() {
                 Tasks for {selectedDate}
               </Text>
               
-              {selectedDateTasks.length === 0 ? (
+              {selectedDateTasks.length === 0 && getCompletedTasksForDate(selectedDate).length === 0 ? (
                 <View className="bg-surface rounded-xl p-6 items-center">
                   <Text className="text-base text-muted">No tasks for this date</Text>
                 </View>
               ) : (
-                selectedDateTasks.map(task => (
+                <>
+                {selectedDateTasks.map(task => (
                   <TouchableOpacity
                     key={task.id}
                     className="bg-surface border border-border rounded-xl p-4 mb-3 active:opacity-70"
@@ -343,6 +400,44 @@ export default function CalendarScreen() {
                     </View>
                   </TouchableOpacity>
                 ))
+                }
+                
+                {/* Completed Tasks for Selected Date */}
+                {showCompleted && getCompletedTasksForDate(selectedDate).length > 0 && (
+                  <>
+                    <Text className="text-base font-semibold text-muted mt-4 mb-2">
+                      Completed ({getCompletedTasksForDate(selectedDate).length})
+                    </Text>
+                    {getCompletedTasksForDate(selectedDate).map(task => (
+                      <TouchableOpacity
+                        key={task.task_id}
+                        className="bg-surface border border-border rounded-xl p-4 mb-3 active:opacity-70 opacity-60"
+                        onPress={() => handleUncompleteTask(task)}
+                      >
+                        <View className="flex-row items-center gap-3">
+                          {/* Completed Checkbox */}
+                          <View
+                            className="w-6 h-6 rounded-full items-center justify-center"
+                            style={{ backgroundColor: colors.primary }}
+                          >
+                            <Text className="text-white text-xs">✓</Text>
+                          </View>
+
+                          {/* Task Content */}
+                          <View className="flex-1">
+                            <Text className="text-base font-medium text-muted mb-1 line-through">
+                              {task.content}
+                            </Text>
+                            <Text className="text-xs text-muted">
+                              Completed {new Date(task.completed_at).toLocaleDateString()}
+                            </Text>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                )}
+                </>
               )}
             </View>
           )}
