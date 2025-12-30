@@ -10,6 +10,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { useAuth } from '@/lib/auth-context';
 import { useColors } from '@/hooks/use-colors';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import packageJson from '../../package.json';
 
 export default function SettingsScreen() {
   const { signOut, isAuthenticated } = useAuth();
@@ -56,7 +57,7 @@ export default function SettingsScreen() {
           <View className="bg-surface border border-border rounded-xl overflow-hidden">
             <View className="p-4 border-b border-border">
               <Text className="text-base text-foreground font-medium">TaskFlow</Text>
-              <Text className="text-sm text-muted mt-1">Version 1.0.8</Text>
+              <Text className="text-sm text-muted mt-1">Version {packageJson.version}</Text>
             </View>
             <View className="p-4">
               <Text className="text-sm text-muted">
