@@ -5,8 +5,20 @@
 </p>
 
 <p align="center">
-  A cross-platform task management app built with Expo/React Native that integrates with the Todoist API.
+  <strong>An unofficial, open-source Todoist client</strong><br>
+  Built with Expo/React Native for a beautiful, native mobile experience.
 </p>
+
+<p align="center">
+  <a href="https://github.com/couturierc/taskflow-app/releases/latest">
+    <img src="https://img.shields.io/github/v/release/couturierc/taskflow-app?style=flat-square" alt="Latest Release">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/github/license/couturierc/taskflow-app?style=flat-square" alt="License">
+  </a>
+</p>
+
+> ⚠️ **Disclaimer**: TaskFlow is an independent, unofficial project and is not affiliated with, endorsed by, or connected to Doist (the makers of Todoist) in any way. "Todoist" is a trademark of Doist. This app uses the official [Todoist API](https://developer.todoist.com/) to connect to your account.
 
 ## Features
 
@@ -165,4 +177,30 @@ JWT_SECRET=your_jwt_secret
 
 ## License
 
-MIT
+This project is licensed under the **GNU General Public License v3.0** - see the [LICENSE](LICENSE) file for details.
+
+This means:
+- ✅ You can use, modify, and distribute this software
+- ✅ You must keep it open source
+- ✅ Derivative works must also be GPL-3.0 licensed
+- ❌ You cannot create closed-source forks
+
+## Acknowledgments
+
+TaskFlow is made possible by these amazing open-source projects:
+
+- **[Expo](https://expo.dev/)** - The platform for universal React apps
+- **[React Native](https://reactnative.dev/)** - Build native apps with React
+- **[NativeWind](https://www.nativewind.dev/)** - TailwindCSS for React Native
+- **[TanStack Query](https://tanstack.com/query)** - Powerful data synchronization
+- **[tRPC](https://trpc.io/)** - End-to-end type-safe APIs
+- **[Drizzle ORM](https://orm.drizzle.team/)** - TypeScript ORM
+- **[Todoist API](https://developer.todoist.com/)** - Task management API
+
+Special thanks to the open-source community for making projects like this possible.
+
+---
+
+<p align="center">
+  Made with ❤️ by <a href="https://github.com/couturierc">Camille Couturier</a>
+</p>
