@@ -9,7 +9,7 @@ import { View, Text, FlatList, TouchableOpacity, RefreshControl, Alert, Activity
 import { useRouter } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { useAuth } from '@/lib/auth-context';
-import { TodoistTask } from '@/lib/todoist-api';
+import { TodoistTask, TodoistCompletedTask } from '@/lib/todoist-api';
 import { organizeTasksWithSubtasks, flattenTasksWithSubtasks, calculateSubtaskProgress, hasSubtasks, TaskWithChildren } from '@/lib/subtask-utils';
 import { useColors } from '@/hooks/use-colors';
 import * as Haptics from 'expo-haptics';
@@ -27,6 +27,7 @@ export default function TodayScreen() {
   const { apiClient, isAuthenticated } = useAuth();
   const { isMultiSelectMode, toggleMultiSelectMode, isTaskSelected, toggleTaskSelection, selectedTasks, deselectAll } = useBatch();
   const [tasks, setTasks] = useState<TodoistTask[]>([]);
+  const [completedTasks, setCompletedTasks] = useState<TodoistCompletedTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTaskModalVisible, setIsTaskModalVisible] = useState(false);
@@ -46,6 +47,24 @@ export default function TodayScreen() {
     }
     loadTasks();
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (showCompleted && apiClient) {
+      loadCompletedTasks();
+    }
+  }, [showCompleted]);
+
+  async function loadCompletedTasks() {
+    if (!apiClient) return;
+
+    try {
+      // Get completed tasks from today (last 24h)
+      const completed = await apiClient.getCompletedTasks({ limit: 50 });
+      setCompletedTasks(completed);
+    } catch (error) {
+      console.error('Failed to load completed tasks:', error);
+    }
+  }
 
   async function loadTasks() {
     if (!apiClient) return;
@@ -99,6 +118,10 @@ export default function TodayScreen() {
       }
       // Reload to get fresh data
       await loadTasks();
+      // Also refresh completed tasks if showing them
+      if (showCompleted) {
+        await loadCompletedTasks();
+      }
     } catch (error) {
       // Revert optimistic update on error
       setTasks(prev => prev.map(t => 
@@ -108,17 +131,34 @@ export default function TodayScreen() {
     }
   }
 
+  // Handler for uncompleting tasks from the completed list
+  async function handleUncompleteTask(completedTask: TodoistCompletedTask) {
+    if (!apiClient) return;
+
+    // Optimistic update - remove from completed list
+    setCompletedTasks(prev => prev.filter(t => t.task_id !== completedTask.task_id));
+
+    try {
+      await apiClient.reopenTask(completedTask.task_id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Reload to get fresh data
+      await loadTasks();
+      if (showCompleted) {
+        await loadCompletedTasks();
+      }
+    } catch (error) {
+      // Revert optimistic update on error
+      setCompletedTasks(prev => [...prev, completedTask]);
+      Alert.alert('Error', 'Failed to reopen task. Please try again.');
+    }
+  }
+
   // Filter and search tasks
   // Organize tasks with subtasks
   const organizedTasks = organizeTasksWithSubtasks(tasks);
   const flatTasks = flattenTasksWithSubtasks(organizedTasks);
   
   const filteredTasks = flatTasks.filter(task => {
-    // Hide completed tasks unless showCompleted is enabled
-    if (!showCompleted && task.is_completed) {
-      return false;
-    }
-
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -139,6 +179,61 @@ export default function TodayScreen() {
 
     return true;
   });
+
+  // Filter completed tasks for display
+  const filteredCompletedTasks = showCompleted ? completedTasks.filter(task => {
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      if (!task.content.toLowerCase().includes(query)) return false;
+    }
+    return true;
+  }) : [];
+
+  function renderCompletedTask(item: TodoistCompletedTask) {
+    return (
+      <TouchableOpacity
+        key={`completed-${item.id}`}
+        className="bg-surface border border-border rounded-xl p-4 mb-3 active:opacity-70"
+        onPress={() => handleUncompleteTask(item)}
+        style={{ opacity: 0.6 }}
+      >
+        <View className="flex-row items-start gap-3">
+          <TouchableOpacity
+            onPress={(e: any) => {
+              e.stopPropagation();
+              handleUncompleteTask(item);
+            }}
+          >
+            <View 
+              className="w-6 h-6 rounded-full border-2 items-center justify-center mt-0.5"
+              style={{ 
+                borderColor: colors.success,
+                backgroundColor: colors.success
+              }}
+            >
+              <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' }}>✓</Text>
+            </View>
+          </TouchableOpacity>
+          <View className="flex-1">
+            <Text 
+              className="text-base text-foreground"
+              style={{ textDecorationLine: 'line-through', opacity: 0.6 }}
+            >
+              {item.content}
+            </Text>
+            <View 
+              className="px-2 py-1 rounded self-start mt-2"
+              style={{ backgroundColor: colors.success + '20' }}
+            >
+              <Text className="text-xs font-medium" style={{ color: colors.success }}>
+                Tap to reopen
+              </Text>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }
 
   function renderTask({ item }: { item: TaskWithChildren }) {
     const isOverdue = item.due && new Date(item.due.date) < new Date(new Date().setHours(0, 0, 0, 0));
@@ -306,14 +401,26 @@ export default function TodayScreen() {
               tintColor={colors.primary}
             />
           }
+          ListFooterComponent={
+            filteredCompletedTasks.length > 0 ? (
+              <View className="mt-4">
+                <Text className="text-lg font-semibold text-muted mb-3">
+                  Completed ({filteredCompletedTasks.length})
+                </Text>
+                {filteredCompletedTasks.map(task => renderCompletedTask(task))}
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
-            <View className="items-center justify-center py-12">
-              <Text className="text-6xl mb-4">✨</Text>
-              <Text className="text-xl font-semibold text-foreground mb-2">All clear!</Text>
-              <Text className="text-base text-muted text-center">
-                No tasks due today. Enjoy your day!
-              </Text>
-            </View>
+            filteredCompletedTasks.length === 0 ? (
+              <View className="items-center justify-center py-12">
+                <Text className="text-6xl mb-4">✨</Text>
+                <Text className="text-xl font-semibold text-foreground mb-2">All clear!</Text>
+                <Text className="text-base text-muted text-center">
+                  No tasks due today. Enjoy your day!
+                </Text>
+              </View>
+            ) : null
           }
         />
 

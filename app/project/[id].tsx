@@ -134,6 +134,29 @@ export default function ProjectDetailScreen() {
     }
   }
 
+  async function handleUncompleteTask(completedTask: TodoistCompletedTask) {
+    if (!apiClient) return;
+
+    // Optimistic update - remove from completed list
+    setCompletedTasks(prev => prev.filter(t => t.task_id !== completedTask.task_id));
+
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await apiClient.reopenTask(completedTask.task_id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Reload to get fresh data
+      await loadProjectData();
+      if (showCompleted && id) {
+        await loadCompletedTasks();
+      }
+    } catch (error) {
+      console.error('Failed to uncomplete task:', error);
+      // Revert optimistic update on error
+      setCompletedTasks(prev => [...prev, completedTask]);
+      Alert.alert('Error', 'Failed to reopen task. Please try again.');
+    }
+  }
+
   async function handleCreateSection() {
     if (!apiClient || !id || !sectionName.trim()) {
       Alert.alert('Error', 'Please enter a section name');
@@ -202,22 +225,31 @@ export default function ProjectDetailScreen() {
 
   function renderCompletedTask(item: TodoistCompletedTask) {
     return (
-      <View
+      <TouchableOpacity
         key={`completed-${item.id}`}
-        className="bg-surface border border-border rounded-xl p-4 mb-3"
+        className="bg-surface border border-border rounded-xl p-4 mb-3 active:opacity-70"
         style={{ opacity: 0.6 }}
+        onPress={() => handleUncompleteTask(item)}
       >
         <View className="flex-row items-start">
           {/* Checkbox */}
-          <View
-            className="w-6 h-6 rounded-full border-2 items-center justify-center mr-3 mt-0.5"
-            style={{
-              borderColor: colors.success,
-              backgroundColor: colors.success,
+          <TouchableOpacity
+            className="mr-3 mt-0.5"
+            onPress={(e: any) => {
+              e.stopPropagation();
+              handleUncompleteTask(item);
             }}
           >
-            <Text className="text-background text-xs font-bold">✓</Text>
-          </View>
+            <View
+              className="w-6 h-6 rounded-full border-2 items-center justify-center"
+              style={{
+                borderColor: colors.success,
+                backgroundColor: colors.success,
+              }}
+            >
+              <Text className="text-background text-xs font-bold">✓</Text>
+            </View>
+          </TouchableOpacity>
 
           {/* Task Content */}
           <View className="flex-1">
@@ -231,12 +263,12 @@ export default function ProjectDetailScreen() {
               style={{ backgroundColor: colors.success + '20' }}
             >
               <Text className="text-xs font-medium" style={{ color: colors.success }}>
-                Completed
+                Tap to reopen
               </Text>
             </View>
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   }
 

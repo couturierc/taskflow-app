@@ -128,6 +128,27 @@ export default function InboxScreen() {
     }
   }
 
+  async function handleUncompleteTask(completedTask: TodoistCompletedTask) {
+    if (!apiClient) return;
+
+    // Optimistic update - remove from completed list
+    setCompletedTasks(prev => prev.filter(t => t.task_id !== completedTask.task_id));
+
+    try {
+      await apiClient.reopenTask(completedTask.task_id);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Reload to get fresh data
+      await loadTasks();
+      if (showCompleted && inboxProjectId) {
+        await loadCompletedTasks();
+      }
+    } catch (error) {
+      // Revert optimistic update on error
+      setCompletedTasks(prev => [...prev, completedTask]);
+      Alert.alert('Error', 'Failed to reopen task. Please try again.');
+    }
+  }
+
   // Filter and search tasks
   const filteredTasks = tasks.filter(task => {
     // Search filter
@@ -174,8 +195,13 @@ export default function InboxScreen() {
     return (
       <TouchableOpacity
         className="bg-surface border border-border rounded-xl p-4 mb-3 active:opacity-70"
-        onPress={() => !isCompleted && handleTaskPress(item as TodoistTask)}
-        disabled={isCompleted}
+        onPress={() => {
+          if (isCompleted) {
+            handleUncompleteTask(item as TodoistCompletedTask);
+          } else {
+            handleTaskPress(item as TodoistTask);
+          }
+        }}
         style={{ opacity: isCompleted ? 0.6 : 1 }}
       >
         <View className="flex-row items-start gap-3">
@@ -183,11 +209,12 @@ export default function InboxScreen() {
           <TouchableOpacity
             onPress={(e: any) => {
               e.stopPropagation();
-              if (!isCompleted) {
+              if (isCompleted) {
+                handleUncompleteTask(item as TodoistCompletedTask);
+              } else {
                 handleToggleComplete(item as TodoistTask);
               }
             }}
-            disabled={isCompleted}
           >
             <View 
             className="w-6 h-6 rounded-full border-2 items-center justify-center mt-0.5"
@@ -228,7 +255,7 @@ export default function InboxScreen() {
                   style={{ backgroundColor: colors.success + '20' }}
                 >
                   <Text className="text-xs font-medium" style={{ color: colors.success }}>
-                    Completed
+                    Tap to reopen
                   </Text>
                 </View>
               )}
