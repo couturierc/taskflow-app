@@ -61,7 +61,10 @@ export default function SettingsScreen() {
             </View>
             <View className="p-4">
               <Text className="text-sm text-muted">
-                A Todoist client for managing your tasks and projects
+                An unofficial, open-source Todoist client for managing your tasks and projects.
+              </Text>
+              <Text className="text-xs text-muted mt-2 italic">
+                Not affiliated with or endorsed by Doist.
               </Text>
             </View>
           </View>
@@ -118,10 +121,20 @@ export default function SettingsScreen() {
               <IconSymbol name="chevron.right" size={20} color={colors.muted} />
             </TouchableOpacity>
             <TouchableOpacity
-              className="p-4 flex-row items-center justify-between active:opacity-70"
+              className="p-4 flex-row items-center justify-between border-b border-border active:opacity-70"
               onPress={() => Alert.alert('Terms', 'By using this app, you agree to follow Todoist\'s Terms of Service and API usage guidelines.')}
             >
               <Text className="text-base text-foreground">Terms of Service</Text>
+              <IconSymbol name="chevron.right" size={20} color={colors.muted} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              className="p-4 flex-row items-center justify-between active:opacity-70"
+              onPress={() => Alert.alert(
+                'Open Source',
+                'TaskFlow is open source software licensed under the GNU General Public License v3.0 (GPL-3.0).\n\nThis means all derivative works must also be open source.\n\nBuilt with:\n• Expo & React Native\n• NativeWind (TailwindCSS)\n• TanStack Query\n• tRPC\n• Todoist API\n\nView source code on GitHub:\ngithub.com/couturierc/taskflow-app'
+              )}
+            >
+              <Text className="text-base text-foreground">Open Source Licenses</Text>
               <IconSymbol name="chevron.right" size={20} color={colors.muted} />
             </TouchableOpacity>
           </View>
@@ -141,7 +154,10 @@ export default function SettingsScreen() {
         {/* Footer */}
         <View className="items-center pb-8">
           <Text className="text-xs text-muted text-center">
-            Made with ❤️ for Todoist users
+            Made with ❤️ by Camille Couturier
+          </Text>
+          <Text className="text-xs text-muted text-center mt-1">
+            Open source • GPL-3.0 License
           </Text>
         </View>
       </ScrollView>
