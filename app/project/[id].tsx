@@ -13,7 +13,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { useAuth } from '@/lib/auth-context';
-import { TodoistTask, TodoistProject, TodoistSection, TodoistLabel } from '@/lib/todoist-api';
+import { TodoistTask, TodoistProject, TodoistSection, TodoistLabel, TodoistCompletedTask } from '@/lib/todoist-api';
 import { LabelBadges } from '@/components/label-badges';
 import { useColors } from '@/hooks/use-colors';
 import * as Haptics from 'expo-haptics';
@@ -27,6 +27,7 @@ export default function ProjectDetailScreen() {
   const { apiClient, isAuthenticated } = useAuth();
   const [project, setProject] = useState<TodoistProject | null>(null);
   const [tasks, setTasks] = useState<TodoistTask[]>([]);
+  const [completedTasks, setCompletedTasks] = useState<TodoistCompletedTask[]>([]);
   const [sections, setSections] = useState<TodoistSection[]>([]);
   const [labels, setLabels] = useState<TodoistLabel[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -50,6 +51,26 @@ export default function ProjectDetailScreen() {
     }
     loadProjectData();
   }, [isAuthenticated, id]);
+
+  useEffect(() => {
+    if (showCompleted && id && apiClient) {
+      loadCompletedTasks();
+    }
+  }, [showCompleted, id]);
+
+  async function loadCompletedTasks() {
+    if (!apiClient || !id) return;
+
+    try {
+      const completed = await apiClient.getCompletedTasks({ 
+        project_id: id,
+        limit: 50 
+      });
+      setCompletedTasks(completed);
+    } catch (error) {
+      console.error('Failed to load completed tasks:', error);
+    }
+  }
 
   async function loadProjectData() {
     if (!apiClient || !id) return;
@@ -149,11 +170,6 @@ export default function ProjectDetailScreen() {
 
   // Filter and search tasks
   const filteredTasks = tasks.filter(task => {
-    // Hide completed tasks unless showCompleted is enabled
-    if (!showCompleted && task.is_completed) {
-      return false;
-    }
-
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       const matchesContent = task.content.toLowerCase().includes(query);
@@ -168,12 +184,61 @@ export default function ProjectDetailScreen() {
     return true;
   });
 
+  // Filter completed tasks for display
+  const filteredCompletedTasks = showCompleted ? completedTasks.filter(task => {
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      if (!task.content.toLowerCase().includes(query)) return false;
+    }
+    return true;
+  }) : [];
+
   // Group tasks by section
   const tasksWithoutSection = filteredTasks.filter(t => !t.section_id);
   const sectionGroups = sections.map(section => ({
     section,
     tasks: filteredTasks.filter(t => t.section_id === section.id),
   }));
+
+  function renderCompletedTask(item: TodoistCompletedTask) {
+    return (
+      <View
+        key={`completed-${item.id}`}
+        className="bg-surface border border-border rounded-xl p-4 mb-3"
+        style={{ opacity: 0.6 }}
+      >
+        <View className="flex-row items-start">
+          {/* Checkbox */}
+          <View
+            className="w-6 h-6 rounded-full border-2 items-center justify-center mr-3 mt-0.5"
+            style={{
+              borderColor: colors.success,
+              backgroundColor: colors.success,
+            }}
+          >
+            <Text className="text-background text-xs font-bold">✓</Text>
+          </View>
+
+          {/* Task Content */}
+          <View className="flex-1">
+            <Text
+              className="text-base line-through text-muted"
+            >
+              {item.content}
+            </Text>
+            <View 
+              className="px-2 py-1 rounded self-start mt-2"
+              style={{ backgroundColor: colors.success + '20' }}
+            >
+              <Text className="text-xs font-medium" style={{ color: colors.success }}>
+                Completed
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   function getPriorityColor(priority: number): string {
     switch (priority) {
@@ -355,6 +420,16 @@ export default function ProjectDetailScreen() {
                       {renderTask({ item: task })}
                     </View>
                   ))}
+                </View>
+              )}
+
+              {/* Completed tasks section */}
+              {filteredCompletedTasks.length > 0 && (
+                <View className="mb-4">
+                  <Text className="text-lg font-semibold text-muted py-2 mb-2">
+                    Completed ({filteredCompletedTasks.length})
+                  </Text>
+                  {filteredCompletedTasks.map(task => renderCompletedTask(task))}
                 </View>
               )}
             </>

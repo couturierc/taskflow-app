@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const API_BASE_URL = 'https://api.todoist.com/rest/v2';
 const SYNC_API_URL = 'https://api.todoist.com/sync/v9/sync';
+const SYNC_COMPLETED_URL = 'https://api.todoist.com/sync/v9/completed/get_all';
 
 export interface TodoistProject {
   id: string;
@@ -82,6 +83,21 @@ export interface TodoistComment {
     file_url: string;
     resource_type: string;
   };
+}
+
+/**
+ * Completed task from Sync API (different structure from active tasks)
+ */
+export interface TodoistCompletedTask {
+  id: string;
+  task_id: string;
+  user_id: string;
+  project_id: string;
+  section_id: string | null;
+  content: string;
+  completed_at: string;
+  note_count: number;
+  meta_data: string | null;
 }
 
 /**
@@ -350,6 +366,30 @@ export class TodoistAPI {
     try {
       await this.client.delete(`/tasks/${taskId}`);
       return true;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
+   * Get completed tasks using Sync API
+   * @param params Optional filters (project_id, limit, offset, since, until)
+   */
+  async getCompletedTasks(params?: {
+    project_id?: string;
+    limit?: number;
+    offset?: number;
+    since?: string;
+    until?: string;
+  }): Promise<TodoistCompletedTask[]> {
+    try {
+      const response = await axios.get(SYNC_COMPLETED_URL, {
+        params,
+        headers: {
+          'Authorization': `Bearer ${this.apiToken}`,
+        },
+      });
+      return response.data?.items || [];
     } catch (error) {
       this.handleError(error);
     }
