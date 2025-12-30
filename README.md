@@ -64,23 +64,16 @@ npx expo prebuild --platform android
 cd android && ./gradlew assembleRelease
 ```
 
-### iOS App (Local Build)
+### iOS App (Local Build - macOS only)
+
+> ⚠️ **Not tested** - iOS builds have not been verified due to time constraints. The commands below are theoretical and may require adjustments.
 
 ```bash
-# Generate native iOS project
 npx expo prebuild --platform ios
-
-# Install CocoaPods dependencies
 cd ios && pod install
-
-# Build for Simulator (no code signing required)
 xcodebuild -workspace TaskFlow.xcworkspace -scheme TaskFlow \
-  -configuration Release -sdk iphonesimulator \
-  -destination 'platform=iOS Simulator,name=iPhone 15' \
-  CODE_SIGNING_ALLOWED=NO build
+  -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO build
 ```
-
-> **Note:** For App Store distribution, open `ios/TaskFlow.xcworkspace` in Xcode and configure your team/signing certificates.
 
 ### Using EAS Build
 
@@ -93,18 +86,15 @@ If you have an Expo account with EAS Build credits:
 
 ## CI/CD with GitHub Actions
 
-This project includes GitHub Actions workflows for building and releasing mobile apps:
+This project includes GitHub Actions workflows for automated Android builds:
 
-### Development Builds
+### Development Build
 
-- **Android** (`.github/workflows/build-android-local.yml`): Builds APK on Ubuntu runners
-- **iOS** (`.github/workflows/build-ios-local.yml`): Builds Simulator app on macOS runners
-
-These workflows run on pushes/PRs to main/master branches.
+- **Android** (`.github/workflows/build-android-local.yml`): Builds APK on Ubuntu runners (on push/PR to main/master)
 
 ### Release Workflow (`.github/workflows/release.yml`)
 
-Creates GitHub Releases with versioned builds for both platforms. Triggered by:
+Creates GitHub Releases with versioned Android APK. Triggered by:
 - Pushing a version tag: `git tag v1.1.0 && git push origin v1.1.0`
 - Manual workflow dispatch with version input
 
@@ -123,9 +113,7 @@ git tag v1.1.1
 git push origin master --tags
 ```
 
-The release workflow will automatically build both platforms and create a GitHub Release with the APK and iOS Simulator builds attached.
-
-> **Note:** iOS builds are Simulator-only (no code signing). For App Store distribution, configure signing in Xcode.
+> **Note:** iOS builds are not automated (code signing complexity, macOS runner costs, and lack of testing time).
 
 ## Environment Variables
 

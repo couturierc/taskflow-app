@@ -72,70 +72,10 @@ jobs:
           path: ./release/TaskFlow-v${{ steps.version.outputs.version }}-android.apk
           retention-days: 90
 
-  # Build iOS Simulator App
-  build-ios:
-    runs-on: macos-latest
-    needs: build-android
-    
-    steps:
-      - name: 🏗 Checkout repository
-        uses: actions/checkout@v4
-
-      - name: 🏗 Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: 📦 Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 9
-
-      - name: 📦 Install dependencies
-        run: pnpm install
-
-      - name: 🍎 Setup Xcode
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
-
-      - name: 📱 Generate native iOS project
-        run: npx expo prebuild --platform ios --clean
-
-      - name: 📦 Install CocoaPods dependencies
-        working-directory: ./ios
-        run: pod install
-
-      - name: 📱 Build iOS App (Simulator)
-        working-directory: ./ios
-        run: |
-          xcodebuild \
-            -workspace TaskFlow.xcworkspace \
-            -scheme TaskFlow \
-            -configuration Release \
-            -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=latest' \
-            -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO \
-            build
-
-      - name: 📦 Create iOS archive with version
-        run: |
-          mkdir -p release
-          cd ios/build/Build/Products/Release-iphonesimulator
-          zip -r ../../../../../release/TaskFlow-v${{ needs.build-android.outputs.version }}-ios-simulator.zip TaskFlow.app
-
-      - name: 📤 Upload iOS artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-release
-          path: ./release/TaskFlow-v${{ needs.build-android.outputs.version }}-ios-simulator.zip
-          retention-days: 90
-
   # Create GitHub Release
   create-release:
     runs-on: ubuntu-latest
-    needs: [build-android, build-ios]
+    needs: [build-android]
     permissions:
       contents: write
     
@@ -149,12 +89,6 @@ jobs:
           name: android-release
           path: ./release
 
-      - name: 📥 Download iOS artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ios-release
-          path: ./release
-
       - name: 📋 Generate release notes
         id: notes
         run: |
@@ -163,7 +97,6 @@ jobs:
           echo "" >> release_notes.md
           echo "### Downloads" >> release_notes.md
           echo "- **Android APK**: \`TaskFlow-v${VERSION}-android.apk\` - Install directly on Android devices" >> release_notes.md
-          echo "- **iOS Simulator**: \`TaskFlow-v${VERSION}-ios-simulator.zip\` - For testing in iOS Simulator" >> release_notes.md
           echo "" >> release_notes.md
           echo "### Installation" >> release_notes.md
           echo "#### Android" >> release_notes.md
@@ -171,11 +104,8 @@ jobs:
           echo "2. Enable 'Install from unknown sources' in your device settings" >> release_notes.md
           echo "3. Open the APK to install" >> release_notes.md
           echo "" >> release_notes.md
-          echo "#### iOS Simulator" >> release_notes.md
-          echo "1. Download and unzip the iOS Simulator build" >> release_notes.md
-          echo "2. Drag TaskFlow.app to an open iOS Simulator window" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "> **Note:** iOS Simulator builds only work on macOS with Xcode installed." >> release_notes.md
+          echo "#### iOS" >> release_notes.md
+          echo "iOS builds are not included in automated releases. See the README for local build instructions." >> release_notes.md
 
       - name: 🚀 Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -187,6 +117,5 @@ jobs:
           prerelease: false
           files: |
             ./release/TaskFlow-v${{ needs.build-android.outputs.version }}-android.apk
-            ./release/TaskFlow-v${{ needs.build-android.outputs.version }}-ios-simulator.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
