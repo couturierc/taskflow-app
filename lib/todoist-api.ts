@@ -336,6 +336,45 @@ export class TodoistAPI {
   }
 
   /**
+   * Move a task to a different section within the same project using Sync API
+   */
+  async moveTaskToSection(taskId: string, sectionId: string | null): Promise<boolean> {
+    try {
+      const response = await axios.post(
+        SYNC_API_URL,
+        {
+          commands: JSON.stringify([
+            {
+              type: 'item_move',
+              uuid: uuidv4(),
+              args: {
+                id: taskId,
+                section_id: sectionId || null,
+              },
+            },
+          ]),
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.apiToken}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }
+      );
+      
+      // Check if the command was successful
+      const syncStatus = response.data?.sync_status;
+      if (syncStatus) {
+        const commandResults = Object.values(syncStatus);
+        return commandResults.every((result: any) => result === 'ok');
+      }
+      return true;
+    } catch (error) {
+      this.handleError(error);
+    }
+  }
+
+  /**
    * Close (complete) a task
    */
   async closeTask(taskId: string): Promise<boolean> {

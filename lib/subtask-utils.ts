@@ -11,6 +11,7 @@ export interface TaskWithChildren extends TodoistTask {
 
 /**
  * Organize flat task list into hierarchical structure with parent-child relationships
+ * Handles deeply nested subtasks (subtasks of subtasks of subtasks...)
  */
 export function organizeTasksWithSubtasks(tasks: TodoistTask[]): TaskWithChildren[] {
   // Create a map of task ID to task with children
@@ -21,7 +22,7 @@ export function organizeTasksWithSubtasks(tasks: TodoistTask[]): TaskWithChildre
     taskMap.set(task.id, { ...task, children: [], level: 0 });
   });
   
-  // Build the hierarchy
+  // Build the hierarchy - first pass: establish parent-child relationships
   const rootTasks: TaskWithChildren[] = [];
   
   tasks.forEach(task => {
@@ -31,7 +32,6 @@ export function organizeTasksWithSubtasks(tasks: TodoistTask[]): TaskWithChildre
       // This is a subtask - add to parent's children
       const parent = taskMap.get(task.parent_id);
       if (parent) {
-        taskWithChildren.level = parent.level + 1;
         parent.children.push(taskWithChildren);
       } else {
         // Parent not found (maybe filtered out), treat as root
@@ -43,18 +43,34 @@ export function organizeTasksWithSubtasks(tasks: TodoistTask[]): TaskWithChildre
     }
   });
   
+  // Second pass: calculate levels recursively from root tasks
+  function setLevels(task: TaskWithChildren, level: number) {
+    task.level = level;
+    task.children.forEach(child => setLevels(child, level + 1));
+  }
+  
+  rootTasks.forEach(task => setLevels(task, 0));
+  
   return rootTasks;
 }
 
 /**
  * Flatten hierarchical tasks back to a flat list (for rendering)
+ * @param tasks The hierarchical task list
+ * @param collapsedIds Optional set of task IDs that are collapsed (their children will be hidden)
  */
-export function flattenTasksWithSubtasks(tasks: TaskWithChildren[]): TaskWithChildren[] {
+export function flattenTasksWithSubtasks(
+  tasks: TaskWithChildren[],
+  collapsedIds?: Set<string>
+): TaskWithChildren[] {
   const result: TaskWithChildren[] = [];
   
   function flatten(task: TaskWithChildren) {
     result.push(task);
-    task.children.forEach(child => flatten(child));
+    // Only include children if parent is not collapsed
+    if (!collapsedIds?.has(task.id)) {
+      task.children.forEach(child => flatten(child));
+    }
   }
   
   tasks.forEach(task => flatten(task));

@@ -14,6 +14,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { useAuth } from '@/lib/auth-context';
 import { TodoistTask, TodoistProject, TodoistSection, TodoistLabel, TodoistCompletedTask } from '@/lib/todoist-api';
+import { organizeTasksWithSubtasks, flattenTasksWithSubtasks, TaskWithChildren, calculateSubtaskProgress, hasSubtasks } from '@/lib/subtask-utils';
 import { LabelBadges } from '@/components/label-badges';
 import { useColors } from '@/hooks/use-colors';
 import * as Haptics from 'expo-haptics';
@@ -34,12 +35,14 @@ export default function ProjectDetailScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTaskModalVisible, setIsTaskModalVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TodoistTask | null>(null);
+  const [defaultSectionId, setDefaultSectionId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({ priority: null, projectId: null });
   const [isSectionModalVisible, setIsSectionModalVisible] = useState(false);
   const [sectionName, setSectionName] = useState('');
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
+  const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(new Set());
   const [showCompleted, setShowCompleted] = useState(false);
   const colors = useColors();
   const router = useRouter();
@@ -216,12 +219,31 @@ export default function ProjectDetailScreen() {
     return true;
   }) : [];
 
-  // Group tasks by section
-  const tasksWithoutSection = filteredTasks.filter(t => !t.section_id);
+  // Organize tasks with subtask hierarchy
+  const organizedTasks = organizeTasksWithSubtasks(filteredTasks);
+  const flatTasks = flattenTasksWithSubtasks(organizedTasks, collapsedTasks);
+
+  // Group tasks by section (using flat tasks that include hierarchy info)
+  const tasksWithoutSection = flatTasks.filter(t => !t.section_id && !t.parent_id);
   const sectionGroups = sections.map(section => ({
     section,
-    tasks: filteredTasks.filter(t => t.section_id === section.id),
+    tasks: flatTasks.filter(t => t.section_id === section.id || 
+      // Include subtasks whose root parent is in this section
+      (t.parent_id && filteredTasks.find(p => p.id === t.parent_id)?.section_id === section.id)),
   }));
+
+  function toggleTaskCollapse(taskId: string) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCollapsedTasks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      return newSet;
+    });
+  }
 
   function renderCompletedTask(item: TodoistCompletedTask) {
     return (
@@ -281,70 +303,163 @@ export default function ProjectDetailScreen() {
     }
   }
 
-  function renderTask({ item }: { item: TodoistTask }) {
+  function renderTask({ item }: { item: TaskWithChildren }) {
+    const indentWidth = item.level * 20; // 20px per level
+    const isSubtask = item.level > 0;
+    const hasChildren = item.children.length > 0;
+    const isCollapsed = collapsedTasks.has(item.id);
+    const progress = hasSubtasks(item) ? calculateSubtaskProgress(item) : null;
+
     return (
-      <TouchableOpacity
-        className="bg-surface border border-border rounded-xl p-4 mb-3 active:opacity-70"
-        onPress={() => handleTaskPress(item)}
-      >
-        <View className="flex-row items-start">
-          {/* Checkbox */}
+      <View className="flex-row">
+        {/* Indent spacer with vertical line for subtasks */}
+        {isSubtask && (
+          <View style={{ width: indentWidth }} className="flex-row">
+            {Array.from({ length: item.level }).map((_, i) => (
+              <View 
+                key={i} 
+                style={{ 
+                  width: 20, 
+                  borderLeftWidth: i === item.level - 1 ? 2 : 0,
+                  borderLeftColor: colors.border,
+                  marginLeft: 8,
+                }}
+              />
+            ))}
+          </View>
+        )}
+        <View className="flex-1">
           <TouchableOpacity
-            className="mr-3 mt-0.5"
-            onPress={() => handleToggleComplete(item)}
+            className="bg-surface border border-border rounded-xl p-4 mb-3 active:opacity-70"
+            style={{
+              borderLeftWidth: isSubtask ? 3 : 1,
+              borderLeftColor: isSubtask ? colors.primary + '60' : colors.border,
+            }}
+            onPress={() => handleTaskPress(item)}
           >
-            <View
-              className="w-6 h-6 rounded-full border-2 items-center justify-center"
-              style={{
-                borderColor: getPriorityColor(item.priority),
-                backgroundColor: item.is_completed ? getPriorityColor(item.priority) : 'transparent',
-              }}
-            >
-              {item.is_completed && (
-                <Text className="text-background text-xs font-bold">✓</Text>
+            <View className="flex-row items-start">
+              {/* Collapse/Expand button for tasks with children */}
+              {hasChildren && (
+                <TouchableOpacity
+                  onPress={(e: any) => {
+                    e.stopPropagation();
+                    toggleTaskCollapse(item.id);
+                  }}
+                  className="w-6 h-6 items-center justify-center mr-2 mt-0.5"
+                >
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>
+                    {isCollapsed ? '▶' : '▼'}
+                  </Text>
+                </TouchableOpacity>
               )}
+              
+              {/* Checkbox */}
+              <TouchableOpacity
+                className="mr-3 mt-0.5"
+                onPress={(e: any) => {
+                  e.stopPropagation();
+                  handleToggleComplete(item);
+                }}
+              >
+                <View
+                  className="w-6 h-6 rounded-full border-2 items-center justify-center"
+                  style={{
+                    borderColor: getPriorityColor(item.priority),
+                    backgroundColor: item.is_completed ? getPriorityColor(item.priority) : 'transparent',
+                  }}
+                >
+                  {item.is_completed && (
+                    <Text className="text-background text-xs font-bold">✓</Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+
+              {/* Task Content */}
+              <View className="flex-1">
+                <View className="flex-row items-center gap-2">
+                  <Text
+                    className={`text-base flex-1 ${item.is_completed ? 'line-through text-muted' : 'text-foreground'}`}
+                  >
+                    {item.content}
+                  </Text>
+                  {/* Collapsed indicator showing hidden count */}
+                  {hasChildren && isCollapsed && (
+                    <View 
+                      className="px-2 py-0.5 rounded"
+                      style={{ backgroundColor: colors.primary + '20' }}
+                    >
+                      <Text className="text-xs font-medium" style={{ color: colors.primary }}>
+                        +{item.children.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                {item.description && (
+                  <Text className="text-sm text-muted mt-1" numberOfLines={2}>
+                    {item.description}
+                  </Text>
+                )}
+                {item.due && (
+                  <Text className="text-xs text-muted mt-2">
+                    📅 {new Date(item.due.date).toLocaleDateString()}
+                  </Text>
+                )}
+                <LabelBadges labelNames={item.labels || []} labels={labels} />
+                
+                {/* Subtask Progress */}
+                {progress && progress.total > 0 && (
+                  <View className="flex-row items-center gap-2 mt-2">
+                    <View className="flex-1 h-2 bg-border rounded-full overflow-hidden">
+                      <View 
+                        className="h-full rounded-full"
+                        style={{ 
+                          width: `${progress.percentage}%`,
+                          backgroundColor: progress.percentage === 100 ? colors.success : colors.primary
+                        }}
+                      />
+                    </View>
+                    <Text className="text-xs text-muted">
+                      {progress.completed}/{progress.total}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
           </TouchableOpacity>
-
-          {/* Task Content */}
-          <View className="flex-1">
-            <Text
-              className={`text-base ${item.is_completed ? 'line-through text-muted' : 'text-foreground'}`}
-            >
-              {item.content}
-            </Text>
-            {item.description && (
-              <Text className="text-sm text-muted mt-1" numberOfLines={2}>
-                {item.description}
-              </Text>
-            )}
-            {item.due && (
-              <Text className="text-xs text-muted mt-2">
-                📅 {new Date(item.due.date).toLocaleDateString()}
-              </Text>
-            )}
-            <LabelBadges labelNames={item.labels || []} labels={labels} />
-          </View>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   }
 
-  function renderSection({ section, tasks: sectionTasks }: { section: TodoistSection; tasks: TodoistTask[] }) {
+  function renderSection({ section, tasks: sectionTasks }: { section: TodoistSection; tasks: TaskWithChildren[] }) {
     const isCollapsed = collapsedSections.has(section.id);
 
     return (
       <View key={section.id} className="mb-4">
         {/* Section Header */}
-        <TouchableOpacity
-          className="flex-row items-center justify-between py-2 mb-2"
-          onPress={() => toggleSection(section.id)}
-        >
-          <Text className="text-lg font-semibold text-foreground">
-            {section.name} ({sectionTasks.length})
-          </Text>
-          <Text className="text-muted">{isCollapsed ? '▶' : '▼'}</Text>
-        </TouchableOpacity>
+        <View className="flex-row items-center justify-between py-2 mb-2">
+          <TouchableOpacity
+            className="flex-row items-center flex-1"
+            onPress={() => toggleSection(section.id)}
+          >
+            <Text className="text-lg font-semibold text-foreground">
+              {section.name} ({sectionTasks.length})
+            </Text>
+            <Text className="text-muted ml-2">{isCollapsed ? '▶' : '▼'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            className="px-3 py-1 rounded-full active:opacity-70"
+            style={{ backgroundColor: colors.primary + '20' }}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setSelectedTask(null);
+              setDefaultSectionId(section.id);
+              setIsTaskModalVisible(true);
+            }}
+          >
+            <Text className="text-sm font-bold" style={{ color: colors.primary }}>+</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Section Tasks */}
         {!isCollapsed && sectionTasks.map(task => (
@@ -405,22 +520,54 @@ export default function ProjectDetailScreen() {
           onFilterPress={() => setIsFilterModalVisible(true)}
         />
 
-        {/* Show/Hide Completed Toggle */}
-        <TouchableOpacity
-          className="flex-row items-center justify-between bg-surface border border-border rounded-xl px-4 py-3 mb-4"
-          onPress={() => setShowCompleted(!showCompleted)}
-        >
-          <Text className="text-base text-foreground">Show completed tasks</Text>
-          <View
-            className="w-12 h-7 rounded-full p-1"
-            style={{ backgroundColor: showCompleted ? colors.primary : colors.border }}
+        {/* Toggle Row: Show Completed & Collapse Subtasks */}
+        <View className="flex-row gap-2 mb-4">
+          {/* Show/Hide Completed Toggle */}
+          <TouchableOpacity
+            className="flex-1 flex-row items-center justify-between bg-surface border border-border rounded-xl px-3 py-3"
+            onPress={() => setShowCompleted(!showCompleted)}
           >
+            <Text className="text-sm text-foreground">Show completed</Text>
             <View
-              className="w-5 h-5 rounded-full bg-white"
-              style={{ marginLeft: showCompleted ? 20 : 0 }}
-            />
-          </View>
-        </TouchableOpacity>
+              className="w-10 h-6 rounded-full p-0.5"
+              style={{ backgroundColor: showCompleted ? colors.primary : colors.border }}
+            >
+              <View
+                className="w-5 h-5 rounded-full bg-white"
+                style={{ marginLeft: showCompleted ? 16 : 0 }}
+              />
+            </View>
+          </TouchableOpacity>
+
+          {/* Show/Hide Subtasks Toggle */}
+          <TouchableOpacity
+            className="flex-1 flex-row items-center justify-between bg-surface border border-border rounded-xl px-3 py-3"
+            onPress={() => {
+              if (collapsedTasks.size === 0) {
+                // Collapse all - find all tasks with children
+                const allParentIds = new Set<string>();
+                flatTasks.forEach(t => {
+                  if (t.children.length > 0) allParentIds.add(t.id);
+                });
+                setCollapsedTasks(allParentIds);
+              } else {
+                // Expand all
+                setCollapsedTasks(new Set());
+              }
+            }}
+          >
+            <Text className="text-sm text-foreground">Show subtasks</Text>
+            <View
+              className="w-10 h-6 rounded-full p-0.5"
+              style={{ backgroundColor: collapsedTasks.size === 0 ? colors.primary : colors.border }}
+            >
+              <View
+                className="w-5 h-5 rounded-full bg-white"
+                style={{ marginLeft: collapsedTasks.size === 0 ? 16 : 0 }}
+              />
+            </View>
+          </TouchableOpacity>
+        </View>
 
         {/* Add Section Button */}
         <TouchableOpacity
@@ -443,9 +590,23 @@ export default function ProjectDetailScreen() {
               {tasksWithoutSection.length > 0 && (
                 <View className="mb-4">
                   {sections.length > 0 && (
-                    <Text className="text-lg font-semibold text-foreground py-2 mb-2">
-                      No Section ({tasksWithoutSection.length})
-                    </Text>
+                    <View className="flex-row items-center justify-between py-2 mb-2">
+                      <Text className="text-lg font-semibold text-foreground">
+                        No Section ({tasksWithoutSection.length})
+                      </Text>
+                      <TouchableOpacity
+                        className="px-3 py-1 rounded-full active:opacity-70"
+                        style={{ backgroundColor: colors.primary + '20' }}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setSelectedTask(null);
+                          setDefaultSectionId(null);
+                          setIsTaskModalVisible(true);
+                        }}
+                      >
+                        <Text className="text-sm font-bold" style={{ color: colors.primary }}>+</Text>
+                      </TouchableOpacity>
+                    </View>
                   )}
                   {tasksWithoutSection.map(task => (
                     <View key={task.id}>
@@ -501,6 +662,7 @@ export default function ProjectDetailScreen() {
           onClose={() => {
             setIsTaskModalVisible(false);
             setSelectedTask(null);
+            setDefaultSectionId(null);
           }}
           onSave={(movedFromProject?: string) => {
             // Always reload project data when saved (covers move, edit, delete cases)
@@ -508,6 +670,7 @@ export default function ProjectDetailScreen() {
           }}
           task={selectedTask}
           defaultProjectId={id}
+          defaultSectionId={defaultSectionId}
         />
 
         {/* Filter Modal */}

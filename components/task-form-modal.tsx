@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/use-colors';
-import { TodoistTask, TodoistProject, TodoistLabel } from '@/lib/todoist-api';
+import { TodoistTask, TodoistProject, TodoistLabel, TodoistSection } from '@/lib/todoist-api';
 import { useAuth } from '@/lib/auth-context';
 import * as Haptics from 'expo-haptics';
 import { CalendarPicker } from './calendar-picker';
@@ -29,6 +29,7 @@ interface TaskFormModalProps {
   onSave: (movedFromProject?: string) => void;
   task?: TodoistTask | null;
   defaultProjectId?: string;
+  defaultSectionId?: string | null;
   parentTaskId?: string | null;
 }
 
@@ -38,6 +39,7 @@ export function TaskFormModal({
   onSave,
   task,
   defaultProjectId,
+  defaultSectionId,
   parentTaskId,
 }: TaskFormModalProps) {
   const colors = useColors();
@@ -46,6 +48,7 @@ export function TaskFormModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [projectId, setProjectId] = useState(defaultProjectId || '');
+  const [sectionId, setSectionId] = useState<string | null>(defaultSectionId || null);
   const [priority, setPriority] = useState<1 | 2 | 3 | 4>(1);
   const [dueDate, setDueDate] = useState('');
   const [dueString, setDueString] = useState('');
@@ -53,6 +56,7 @@ export function TaskFormModal({
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [projects, setProjects] = useState<TodoistProject[]>([]);
+  const [sections, setSections] = useState<TodoistSection[]>([]);
   const [labels, setLabels] = useState<TodoistLabel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -64,12 +68,20 @@ export function TaskFormModal({
     }
   }, [visible, apiClient]);
 
+  // Load sections when project changes
+  useEffect(() => {
+    if (visible && apiClient && projectId) {
+      loadSections(projectId);
+    }
+  }, [visible, apiClient, projectId]);
+
   // Populate form when editing
   useEffect(() => {
     if (task) {
       setTitle(task.content);
       setDescription(task.description);
       setProjectId(task.project_id);
+      setSectionId(task.section_id);
       setPriority(task.priority);
       setDueDate(task.due?.date || '');
       setDueString(task.due?.string || '');
@@ -80,13 +92,14 @@ export function TaskFormModal({
       setTitle('');
       setDescription('');
       setProjectId(defaultProjectId || '');
+      setSectionId(defaultSectionId || null);
       setPriority(1);
       setDueDate('');
       setDueString('');
       setIsRecurring(false);
       setSelectedLabels([]);
     }
-  }, [task, defaultProjectId]);
+  }, [task, defaultProjectId, defaultSectionId]);
 
   async function loadProjects() {
     if (!apiClient) return;
@@ -101,6 +114,21 @@ export function TaskFormModal({
       }
     } catch (error) {
       console.error('Failed to load projects:', error);
+    }
+  }
+
+  async function loadSections(projId: string) {
+    if (!apiClient) return;
+    try {
+      const projectSections = await apiClient.getSections(projId);
+      setSections(projectSections);
+      // Reset section if it's not in the new project
+      if (sectionId && !projectSections.find(s => s.id === sectionId)) {
+        setSectionId(null);
+      }
+    } catch (error) {
+      console.error('Failed to load sections:', error);
+      setSections([]);
     }
   }
 
@@ -188,7 +216,9 @@ export function TaskFormModal({
       if (task) {
         // Update existing task
         const oldProjectId = task.project_id;
+        const oldSectionId = task.section_id;
         const isMovingProject = oldProjectId !== projectId;
+        const isMovingSection = oldSectionId !== sectionId;
         
         // First update task properties (without project_id - it's read-only in REST API)
         await apiClient.updateTask(task.id, {
@@ -203,6 +233,10 @@ export function TaskFormModal({
         if (isMovingProject) {
           await apiClient.moveTask(task.id, projectId);
           onSave(oldProjectId);
+        } else if (isMovingSection) {
+          // Move to different section within same project
+          await apiClient.moveTaskToSection(task.id, sectionId);
+          onSave();
         } else {
           onSave();
         }
@@ -212,6 +246,7 @@ export function TaskFormModal({
           content: title.trim(),
           description: description.trim(),
           project_id: projectId,
+          section_id: sectionId || undefined,
           priority,
           due_string: dueString || dueDate || undefined,
           labels: selectedLabels,
@@ -232,11 +267,13 @@ export function TaskFormModal({
     setTitle('');
     setDescription('');
     setProjectId(defaultProjectId || '');
+    setSectionId(defaultSectionId || null);
     setPriority(1);
     setDueDate('');
     setDueString('');
     setIsRecurring(false);
     setSelectedLabels([]);
+    setSections([]);
     onClose();
   }
 
@@ -327,13 +364,58 @@ export function TaskFormModal({
                         backgroundColor: projectId === project.id ? colors.primary + '20' : colors.surface,
                         borderColor: projectId === project.id ? colors.primary : colors.border,
                       }}
-                      onPress={() => setProjectId(project.id)}
+                      onPress={() => {
+                        setProjectId(project.id);
+                        setSectionId(null); // Reset section when project changes
+                      }}
                     >
                       <Text
                         className="text-sm font-medium"
                         style={{ color: projectId === project.id ? colors.primary : colors.foreground }}
                       >
                         {project.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Section Selector */}
+            {sections.length > 0 && (
+              <View className="mb-6">
+                <Text className="text-sm font-semibold text-foreground mb-2">Section</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="gap-2">
+                  <TouchableOpacity
+                    className="px-4 py-2 rounded-full border active:opacity-70"
+                    style={{
+                      backgroundColor: sectionId === null ? colors.primary + '20' : colors.surface,
+                      borderColor: sectionId === null ? colors.primary : colors.border,
+                    }}
+                    onPress={() => setSectionId(null)}
+                  >
+                    <Text
+                      className="text-sm font-medium"
+                      style={{ color: sectionId === null ? colors.primary : colors.foreground }}
+                    >
+                      No Section
+                    </Text>
+                  </TouchableOpacity>
+                  {sections.map(section => (
+                    <TouchableOpacity
+                      key={section.id}
+                      className="px-4 py-2 rounded-full border active:opacity-70"
+                      style={{
+                        backgroundColor: sectionId === section.id ? colors.primary + '20' : colors.surface,
+                        borderColor: sectionId === section.id ? colors.primary : colors.border,
+                      }}
+                      onPress={() => setSectionId(section.id)}
+                    >
+                      <Text
+                        className="text-sm font-medium"
+                        style={{ color: sectionId === section.id ? colors.primary : colors.foreground }}
+                      >
+                        {section.name}
                       </Text>
                     </TouchableOpacity>
                   ))}
