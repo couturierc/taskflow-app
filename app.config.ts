@@ -48,6 +48,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "expo-document-picker",
     [
       "expo-audio",
       {

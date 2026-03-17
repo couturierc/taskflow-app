@@ -22,6 +22,7 @@ import { LabelBadges } from '@/components/label-badges';
 import { useBatch } from '@/lib/batch-context';
 import { BatchActionBar } from '@/components/batch-action-bar';
 import { MarkdownText } from '@/components/markdown-text';
+import { shouldPromptBackup } from '@/lib/backup';
 
 export default function TodayScreen() {
   const { apiClient, isAuthenticated } = useAuth();
@@ -48,6 +49,24 @@ export default function TodayScreen() {
     }
     loadTasks();
   }, [isAuthenticated]);
+
+  // Prompt backup on first login with data
+  useEffect(() => {
+    if (!isLoading && tasks.length > 0) {
+      shouldPromptBackup().then(needs => {
+        if (needs) {
+          Alert.alert(
+            'Back up your data?',
+            'You have tasks but no backup yet. Go to Settings → Backup & Restore to create one.',
+            [
+              { text: 'Later', style: 'cancel' },
+              { text: 'Go to Settings', onPress: () => router.push('/(tabs)/settings') },
+            ],
+          );
+        }
+      });
+    }
+  }, [isLoading, tasks.length]);
 
   useEffect(() => {
     if (showCompleted && apiClient) {

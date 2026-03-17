@@ -25,6 +25,9 @@ const MAPPING = {
   "tray.fill": "inbox",
   "checkmark.circle.fill": "check-circle",
   "circle": "radio-button-unchecked",
+  "arrow.up.doc.fill": "backup",
+  "arrow.down.doc.fill": "restore",
+  "clock.arrow.circlepath": "history",
 } as IconMapping;
 
 /**
