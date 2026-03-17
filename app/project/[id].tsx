@@ -118,10 +118,10 @@ export default function ProjectDetailScreen() {
 
       // Optimistic update
       setTasks(tasks.map(t =>
-        t.id === task.id ? { ...t, is_completed: !t.is_completed } : t
+        t.id === task.id ? { ...t, checked: !t.checked } : t
       ));
 
-      if (task.is_completed) {
+      if (task.checked) {
         await apiClient.reopenTask(task.id);
       } else {
         await apiClient.closeTask(task.id);
@@ -365,10 +365,10 @@ export default function ProjectDetailScreen() {
                   className="w-6 h-6 rounded-full border-2 items-center justify-center"
                   style={{
                     borderColor: getPriorityColor(item.priority),
-                    backgroundColor: item.is_completed ? getPriorityColor(item.priority) : 'transparent',
+                    backgroundColor: item.checked ? getPriorityColor(item.priority) : 'transparent',
                   }}
                 >
-                  {item.is_completed && (
+                  {item.checked && (
                     <Text className="text-background text-xs font-bold">✓</Text>
                   )}
                 </View>
@@ -378,7 +378,7 @@ export default function ProjectDetailScreen() {
               <View className="flex-1">
                 <View className="flex-row items-center gap-2">
                   <Text
-                    className={`text-base flex-1 ${item.is_completed ? 'line-through text-muted' : 'text-foreground'}`}
+                    className={`text-base flex-1 ${item.checked ? 'line-through text-muted' : 'text-foreground'}`}
                   >
                     {item.content}
                   </Text>
@@ -508,7 +508,7 @@ export default function ProjectDetailScreen() {
           </View>
           {tasks.length > 0 && (
             <Text className="text-sm text-muted mt-2">
-              {tasks.filter(t => !t.is_completed).length} active • {tasks.length} total
+              {tasks.filter(t => !t.checked).length} active • {tasks.length} total
             </Text>
           )}
         </View>

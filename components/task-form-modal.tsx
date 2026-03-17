@@ -109,7 +109,7 @@ export function TaskFormModal({
       
       // Set default project if not set
       if (!projectId && allProjects.length > 0) {
-        const inbox = allProjects.find(p => p.is_inbox_project);
+        const inbox = allProjects.find(p => p.inbox_project);
         setProjectId(inbox?.id || allProjects[0].id);
       }
     } catch (error) {

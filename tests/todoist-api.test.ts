@@ -1,6 +1,6 @@
 /**
  * Todoist API Integration Tests
- * 
+ *
  * Tests the Todoist API client with mock data
  */
 
@@ -52,31 +52,37 @@ describe('TodoistAPI', () => {
   it('should validate task structure', () => {
     const mockTask = {
       id: '123',
+      user_id: '789',
       project_id: '456',
       section_id: null,
+      parent_id: null,
+      added_by_uid: '789',
+      assigned_by_uid: null,
+      responsible_uid: null,
       content: 'Test task',
       description: 'Test description',
-      is_completed: false,
+      checked: false,
       labels: ['label1'],
-      parent_id: null,
-      order: 1,
-      priority: 1 as 1 | 2 | 3 | 4,
+      child_order: 1,
+      priority: 1,
       due: {
         date: '2024-12-31',
-        is_recurring: false,
         string: 'Dec 31',
       },
-      url: 'https://todoist.com/showTask?id=123',
-      comment_count: 0,
-      created_at: '2024-01-01T00:00:00Z',
-      creator_id: '789',
-      assignee_id: null,
-      assigner_id: null,
+      deadline: null,
+      duration: null,
+      note_count: 0,
+      added_at: '2024-01-01T00:00:00Z',
+      completed_at: null,
+      updated_at: '2024-01-01T00:00:00Z',
+      is_deleted: false,
+      day_order: 0,
+      is_collapsed: false,
     };
 
     expect(mockTask.id).toBeDefined();
     expect(mockTask.content).toBeDefined();
-    expect(typeof mockTask.is_completed).toBe('boolean');
+    expect(typeof mockTask.checked).toBe('boolean');
     expect([1, 2, 3, 4]).toContain(mockTask.priority);
   });
 
@@ -86,18 +92,25 @@ describe('TodoistAPI', () => {
       name: 'Test Project',
       color: 'red',
       parent_id: null,
-      order: 1,
-      comment_count: 0,
+      child_order: 1,
       is_shared: false,
       is_favorite: false,
-      is_inbox_project: false,
-      is_team_inbox: false,
-      view_style: 'list' as 'list' | 'board',
-      url: 'https://todoist.com/showProject?id=123',
+      inbox_project: false,
+      view_style: 'list',
+      description: '',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+      is_archived: false,
+      is_deleted: false,
+      can_assign_tasks: true,
+      creator_uid: '789',
+      is_frozen: false,
+      default_order: 0,
+      is_collapsed: false,
     };
 
     expect(mockProject.id).toBeDefined();
     expect(mockProject.name).toBeDefined();
-    expect(['list', 'board']).toContain(mockProject.view_style);
+    expect(typeof mockProject.inbox_project).toBe('boolean');
   });
 });

@@ -96,7 +96,7 @@ describe('v1.0.8 Features', () => {
         content: 'Task for complete/reopen test',
       });
 
-      expect((task as any).is_completed).toBe(false);
+      expect((task as any).checked).toBe(false);
 
       // Complete task
       const completed = await apiClient.closeTask(task.id);
@@ -118,7 +118,7 @@ describe('v1.0.8 Features', () => {
 
     it('should support task creation with all properties', async () => {
       const projects = await apiClient.getProjects();
-      const inboxProject = projects.find((p: any) => p.is_inbox_project);
+      const inboxProject = projects.find((p: any) => p.inbox_project);
       const inboxId = inboxProject?.id || '2300938957';
       
       const task = await apiClient.createTask({

@@ -1,59 +1,85 @@
 /**
- * Todoist REST API v2 Client
- * 
- * Official documentation: https://developer.todoist.com/rest/v2/
+ * Todoist API v1 Client
+ *
+ * Official documentation: https://developer.todoist.com/api/v1/
+ *
+ * Migrated from deprecated REST API v2 + Sync API v9 to the unified
+ * Todoist API v1. Key differences:
+ *   - Base URL: /api/v1 (replaces /rest/v2 and /sync/v9)
+ *   - List endpoints return { results, next_cursor } instead of plain arrays
+ *   - Completed tasks endpoint requires since/until date range
+ *   - Some field names changed (is_completed -> checked, etc.)
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 
-const API_BASE_URL = 'https://api.todoist.com/rest/v2';
-const SYNC_API_URL = 'https://api.todoist.com/sync/v9/sync';
-const SYNC_COMPLETED_URL = 'https://api.todoist.com/sync/v9/completed/get_all';
+const API_BASE_URL = 'https://api.todoist.com/api/v1';
+const SYNC_API_URL = 'https://api.todoist.com/api/v1/sync';
+const COMPLETED_TASKS_URL = 'https://api.todoist.com/api/v1/tasks/completed/by_completion_date';
+
+/**
+ * Paginated response wrapper used by all v1 list endpoints.
+ */
+export interface PaginatedResponse<T> {
+  results: T[];
+  next_cursor: string | null;
+}
 
 export interface TodoistProject {
   id: string;
   name: string;
   color: string;
   parent_id: string | null;
-  order: number;
-  comment_count: number;
+  child_order: number;
   is_shared: boolean;
   is_favorite: boolean;
-  is_inbox_project: boolean;
-  is_team_inbox: boolean;
-  view_style: 'list' | 'board';
-  url: string;
-  description?: string;
+  inbox_project: boolean;
+  view_style: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+  is_archived: boolean;
+  is_deleted: boolean;
+  can_assign_tasks: boolean;
+  creator_uid: string;
+  is_frozen: boolean;
+  default_order: number;
+  is_collapsed: boolean;
 }
 
 export interface TodoistTask {
   id: string;
+  user_id: string;
   project_id: string;
   section_id: string | null;
+  parent_id: string | null;
+  added_by_uid: string;
+  assigned_by_uid: string | null;
+  responsible_uid: string | null;
   content: string;
   description: string;
-  is_completed: boolean;
+  checked: boolean;
   labels: string[];
-  parent_id: string | null;
-  order: number;
-  priority: 1 | 2 | 3 | 4; // 1 is normal, 4 is urgent
+  child_order: number;
+  priority: number;
   due: {
     date: string;
-    is_recurring: boolean;
-    datetime?: string;
     string: string;
-    timezone?: string;
     lang?: string;
+    is_recurring?: boolean;
+    datetime?: string;
+    timezone?: string;
   } | null;
-  url: string;
-  comment_count: number;
-  created_at: string;
-  creator_id: string;
-  assignee_id: string | null;
-  assigner_id: string | null;
-  duration: any | null;
   deadline: any | null;
+  duration: { amount: number; unit: string } | null;
+  note_count: number;
+  added_at: string;
+  completed_at: string | null;
+  updated_at: string;
+  is_deleted: boolean;
+  day_order: number;
+  is_collapsed: boolean;
 }
 
 export interface TodoistSection {
@@ -86,19 +112,10 @@ export interface TodoistComment {
 }
 
 /**
- * Completed task from Sync API (different structure from active tasks)
+ * Completed task from the v1 completed-tasks endpoint.
+ * Same shape as TodoistTask but with checked=true and completed_at set.
  */
-export interface TodoistCompletedTask {
-  id: string;
-  task_id: string;
-  user_id: string;
-  project_id: string;
-  section_id: string | null;
-  content: string;
-  completed_at: string;
-  note_count: number;
-  meta_data: string | null;
-}
+export type TodoistCompletedTask = TodoistTask;
 
 /**
  * Custom error class for Todoist API errors
@@ -139,11 +156,11 @@ export class TodoistAPI {
   private handleError(error: any): never {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError;
-      
+
       if (axiosError.response) {
         const status = axiosError.response.status;
         const data = axiosError.response.data as any;
-        
+
         switch (status) {
           case 400:
             throw new TodoistAPIError('Bad request. Please check your input.', status, error);
@@ -190,12 +207,11 @@ export class TodoistAPI {
   // ============ Projects ============
 
   /**
-   * Get all projects
+   * Get all projects (auto-paginates)
    */
   async getProjects(): Promise<TodoistProject[]> {
     try {
-      const response = await this.client.get('/projects');
-      return response.data;
+      return await this.fetchAllPages<TodoistProject>('/projects');
     } catch (error) {
       this.handleError(error);
     }
@@ -216,19 +232,17 @@ export class TodoistAPI {
   // ============ Tasks ============
 
   /**
-   * Get all active tasks
-   * @param params Optional filters (project_id, section_id, label, filter, ids)
+   * Get all active tasks (auto-paginates)
+   * @param params Optional filters (project_id, section_id, label, ids)
    */
   async getTasks(params?: {
     project_id?: string;
     section_id?: string;
     label?: string;
-    filter?: string;
     ids?: string[];
   }): Promise<TodoistTask[]> {
     try {
-      const response = await this.client.get('/tasks', { params });
-      return response.data;
+      return await this.fetchAllPages<TodoistTask>('/tasks', params);
     } catch (error) {
       this.handleError(error);
     }
@@ -257,12 +271,15 @@ export class TodoistAPI {
     parent_id?: string;
     order?: number;
     labels?: string[];
-    priority?: 1 | 2 | 3 | 4;
+    priority?: number;
     due_string?: string;
     due_date?: string;
     due_datetime?: string;
     due_lang?: string;
     assignee_id?: string;
+    duration?: number;
+    duration_unit?: string;
+    deadline_date?: string;
   }): Promise<TodoistTask> {
     try {
       const response = await this.client.post('/tasks', task);
@@ -274,18 +291,20 @@ export class TodoistAPI {
 
   /**
    * Update an existing task
-   * Note: project_id is read-only in REST API v2, use moveTask() to move a task
    */
   async updateTask(taskId: string, updates: {
     content?: string;
     description?: string;
     labels?: string[];
-    priority?: 1 | 2 | 3 | 4;
+    priority?: number;
     due_string?: string;
     due_date?: string;
     due_datetime?: string;
     due_lang?: string;
     assignee_id?: string;
+    duration?: number;
+    duration_unit?: string;
+    deadline_date?: string;
   }): Promise<TodoistTask> {
     try {
       const response = await this.client.post(`/tasks/${taskId}`, updates);
@@ -322,7 +341,7 @@ export class TodoistAPI {
           },
         }
       );
-      
+
       // Check if the command was successful
       const syncStatus = response.data?.sync_status;
       if (syncStatus) {
@@ -361,7 +380,7 @@ export class TodoistAPI {
           },
         }
       );
-      
+
       // Check if the command was successful
       const syncStatus = response.data?.sync_status;
       if (syncStatus) {
@@ -411,24 +430,30 @@ export class TodoistAPI {
   }
 
   /**
-   * Get completed tasks using Sync API
-   * @param params Optional filters (project_id, limit, offset, since, until)
+   * Get completed tasks
+   * @param params Required: since and until (ISO 8601 datetime). Optional: project_id, limit, cursor.
    */
-  async getCompletedTasks(params?: {
+  async getCompletedTasks(params: {
+    since: string;
+    until: string;
     project_id?: string;
+    section_id?: string;
     limit?: number;
-    offset?: number;
-    since?: string;
-    until?: string;
+    cursor?: string;
   }): Promise<TodoistCompletedTask[]> {
     try {
-      const response = await axios.get(SYNC_COMPLETED_URL, {
-        params,
-        headers: {
-          'Authorization': `Bearer ${this.apiToken}`,
-        },
-      });
-      return response.data?.items || [];
+      const all: TodoistCompletedTask[] = [];
+      let cursor: string | null = params.cursor ?? null;
+      do {
+        const response = await axios.get(COMPLETED_TASKS_URL, {
+          params: { ...params, cursor },
+          headers: { 'Authorization': `Bearer ${this.apiToken}` },
+        });
+        const data = response.data as { items: TodoistCompletedTask[]; next_cursor: string | null };
+        all.push(...(data.items || []));
+        cursor = data.next_cursor;
+      } while (cursor);
+      return all;
     } catch (error) {
       this.handleError(error);
     }
@@ -437,13 +462,12 @@ export class TodoistAPI {
   // ============ Sections ============
 
   /**
-   * Get all sections (optionally filtered by project)
+   * Get all sections (optionally filtered by project, auto-paginates)
    */
   async getSections(projectId?: string): Promise<TodoistSection[]> {
     try {
       const params = projectId ? { project_id: projectId } : undefined;
-      const response = await this.client.get('/sections', { params });
-      return response.data;
+      return await this.fetchAllPages<TodoistSection>('/sections', params);
     } catch (error) {
       this.handleError(error);
     }
@@ -506,12 +530,11 @@ export class TodoistAPI {
   // ============ Labels ============
 
   /**
-   * Get all labels
+   * Get all labels (auto-paginates)
    */
   async getLabels(): Promise<TodoistLabel[]> {
     try {
-      const response = await this.client.get('/labels');
-      return response.data;
+      return await this.fetchAllPages<TodoistLabel>('/labels');
     } catch (error) {
       this.handleError(error);
     }
@@ -588,10 +611,10 @@ export class TodoistAPI {
       const allTasks = await this.getTasks();
       return allTasks.filter(task => {
         if (!task.due) return false;
-        
+
         const dueDate = new Date(task.due.date);
         dueDate.setHours(0, 0, 0, 0);
-        
+
         // Include today and overdue tasks
         return dueDate <= today;
       });
@@ -606,8 +629,8 @@ export class TodoistAPI {
   async getInboxTasks(): Promise<TodoistTask[]> {
     try {
       const projects = await this.getProjects();
-      const inboxProject = projects.find(p => p.is_inbox_project);
-      
+      const inboxProject = projects.find(p => p.inbox_project);
+
       if (!inboxProject) {
         return [];
       }
@@ -616,6 +639,26 @@ export class TodoistAPI {
     } catch (error) {
       this.handleError(error);
     }
+  }
+
+  // ============ Pagination ============
+
+  /**
+   * Fetch all pages from a cursor-paginated v1 endpoint.
+   * v1 list endpoints return { results: T[], next_cursor: string | null }.
+   */
+  private async fetchAllPages<T>(path: string, params?: Record<string, any>): Promise<T[]> {
+    const all: T[] = [];
+    let cursor: string | null = null;
+    do {
+      const response = await this.client.get(path, {
+        params: { ...params, cursor, limit: 200 },
+      });
+      const data = response.data as PaginatedResponse<T>;
+      all.push(...data.results);
+      cursor = data.next_cursor;
+    } while (cursor);
+    return all;
   }
 }
 

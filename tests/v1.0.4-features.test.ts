@@ -131,7 +131,7 @@ describe('v1.0.4 Features', () => {
   describe('Calendar View', () => {
     it('should fetch tasks with due dates for calendar view', async () => {
       const tasks = await apiClient.getTasks();
-      const tasksWithDueDates = tasks.filter((task: typeof tasks[0]) => task.due && !task.is_completed);
+      const tasksWithDueDates = tasks.filter((task: typeof tasks[0]) => task.due && !task.checked);
       
       expect(Array.isArray(tasksWithDueDates)).toBe(true);
       
@@ -144,7 +144,7 @@ describe('v1.0.4 Features', () => {
 
     it('should group tasks by date correctly', async () => {
       const tasks = await apiClient.getTasks();
-      const tasksWithDueDates = tasks.filter((task: typeof tasks[0]) => task.due && !task.is_completed);
+      const tasksWithDueDates = tasks.filter((task: typeof tasks[0]) => task.due && !task.checked);
       
       // Group by date
       const tasksByDate = new Map<string, typeof tasks>();

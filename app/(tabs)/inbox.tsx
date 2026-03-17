@@ -77,7 +77,7 @@ export default function InboxScreen() {
         apiClient.getLabels(),
       ]);
       
-      const inbox = allProjects.find(p => p.is_inbox_project);
+      const inbox = allProjects.find(p => p.inbox_project);
       if (inbox) {
         setInboxProjectId(inbox.id);
       }
@@ -109,11 +109,11 @@ export default function InboxScreen() {
 
     // Optimistic update
     setTasks(prev => prev.map(t => 
-      t.id === task.id ? { ...t, is_completed: !t.is_completed } : t
+      t.id === task.id ? { ...t, checked: !t.checked } : t
     ));
 
     try {
-      if (task.is_completed) {
+      if (task.checked) {
         await apiClient.reopenTask(task.id);
       } else {
         await apiClient.closeTask(task.id);
@@ -124,7 +124,7 @@ export default function InboxScreen() {
     } catch (error) {
       // Revert optimistic update on error
       setTasks(prev => prev.map(t => 
-        t.id === task.id ? { ...t, is_completed: task.is_completed } : t
+        t.id === task.id ? { ...t, checked: task.checked } : t
       ));
       Alert.alert('Error', 'Failed to update task. Please try again.');
     }
@@ -260,11 +260,11 @@ export default function InboxScreen() {
                 <View 
                   className="w-6 h-6 rounded-full border-2 items-center justify-center mt-0.5"
                   style={{ 
-                    borderColor: item.is_completed ? colors.success : colors.primary,
-                    backgroundColor: item.is_completed ? colors.success : 'transparent'
+                    borderColor: item.checked ? colors.success : colors.primary,
+                    backgroundColor: item.checked ? colors.success : 'transparent'
                   }}
                 >
-                  {item.is_completed && (
+                  {item.checked && (
                     <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' }}>✓</Text>
                   )}
                 </View>
@@ -276,8 +276,8 @@ export default function InboxScreen() {
                   <Text 
                     className="text-base text-foreground flex-1"
                     style={{ 
-                      textDecorationLine: item.is_completed ? 'line-through' : 'none',
-                      opacity: item.is_completed ? 0.6 : 1
+                      textDecorationLine: item.checked ? 'line-through' : 'none',
+                      opacity: item.checked ? 0.6 : 1
                     }}
                   >
                     {item.content}
@@ -414,7 +414,7 @@ export default function InboxScreen() {
           <Text className="text-3xl font-bold text-foreground">Inbox</Text>
           {tasks.length > 0 && (
             <Text className="text-sm text-muted mt-2">
-              {tasks.filter(t => !t.is_completed).length} tasks
+              {tasks.filter(t => !t.checked).length} tasks
             </Text>
           )}
         </View>

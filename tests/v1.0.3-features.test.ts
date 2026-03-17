@@ -130,7 +130,7 @@ describe('v1.0.3 Features - Labels, Sections, Project Detail', () => {
 
       // Create a test task
       const projects = await apiClient.getProjects();
-      const inbox = projects.find((p: any) => p.is_inbox_project);
+      const inbox = projects.find((p: any) => p.inbox_project);
       
       const task = await apiClient.createTask({
         content: `Test task with labels ${Date.now()}`,

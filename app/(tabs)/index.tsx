@@ -138,11 +138,11 @@ export default function TodayScreen() {
 
     // Optimistic update
     setTasks(prev => prev.map(t => 
-      t.id === task.id ? { ...t, is_completed: !t.is_completed } : t
+      t.id === task.id ? { ...t, checked: !t.checked } : t
     ));
 
     try {
-      if (task.is_completed) {
+      if (task.checked) {
         await apiClient.reopenTask(task.id);
       } else {
         await apiClient.closeTask(task.id);
@@ -157,7 +157,7 @@ export default function TodayScreen() {
     } catch (error) {
       // Revert optimistic update on error
       setTasks(prev => prev.map(t => 
-        t.id === task.id ? { ...t, is_completed: task.is_completed } : t
+        t.id === task.id ? { ...t, checked: task.checked } : t
       ));
       Alert.alert('Error', 'Failed to update task. Please try again.');
     }
@@ -343,11 +343,11 @@ export default function TodayScreen() {
             <View 
             className="w-6 h-6 rounded-full border-2 items-center justify-center mt-0.5"
             style={{ 
-              borderColor: item.is_completed ? colors.success : colors.primary,
-              backgroundColor: item.is_completed ? colors.success : 'transparent'
+              borderColor: item.checked ? colors.success : colors.primary,
+              backgroundColor: item.checked ? colors.success : 'transparent'
             }}
           >
-              {item.is_completed && (
+              {item.checked && (
                 <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: 'bold' }}>✓</Text>
               )}
             </View>
@@ -358,7 +358,7 @@ export default function TodayScreen() {
             <View className="flex-row items-center gap-2">
               <View
                 style={{ 
-                  opacity: item.is_completed ? 0.5 : 1,
+                  opacity: item.checked ? 0.5 : 1,
                   flex: 1,
                 }}
               >
@@ -386,7 +386,7 @@ export default function TodayScreen() {
             {/* Metadata */}
             <View className="flex-row items-center gap-2 mt-2 flex-wrap">
               {/* Project Badge */}
-              {project && !project.is_inbox_project && (
+              {project && !project.inbox_project && (
                 <View 
                   className="px-2 py-1 rounded flex-row items-center gap-1"
                   style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
@@ -475,7 +475,7 @@ export default function TodayScreen() {
           </Text>
           {tasks.length > 0 && (
             <Text className="text-sm text-muted mt-2">
-              {tasks.filter(t => !t.is_completed).length} tasks remaining
+              {tasks.filter(t => !t.checked).length} tasks remaining
             </Text>
           )}
         </View>

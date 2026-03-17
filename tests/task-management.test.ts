@@ -125,12 +125,12 @@ describe('Task Management Features', () => {
     // Complete the task
     await api.closeTask(task.id);
     const completedTask = await api.getTask(task.id);
-    expect(completedTask.is_completed).toBe(true);
+    expect(completedTask.checked).toBe(true);
 
     // Reopen the task
     await api.reopenTask(task.id);
     const reopenedTask = await api.getTask(task.id);
-    expect(reopenedTask.is_completed).toBe(false);
+    expect(reopenedTask.checked).toBe(false);
 
     // Clean up
     await api.deleteTask(task.id);

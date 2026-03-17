@@ -99,7 +99,7 @@ export default function CalendarScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
     try {
-      if (task.is_completed) {
+      if (task.checked) {
         await apiClient.reopenTask(task.id);
       } else {
         await apiClient.closeTask(task.id);
@@ -488,10 +488,10 @@ export default function CalendarScreen() {
                             className="w-6 h-6 rounded-full border-2 items-center justify-center mt-0.5 active:opacity-60"
                             style={{
                               borderColor: task.priority === 4 ? colors.error : colors.primary,
-                              backgroundColor: task.is_completed ? (task.priority === 4 ? colors.error : colors.primary) : 'transparent',
+                              backgroundColor: task.checked ? (task.priority === 4 ? colors.error : colors.primary) : 'transparent',
                             }}
                           >
-                            {task.is_completed && (
+                            {task.checked && (
                               <Text className="text-white text-xs">✓</Text>
                             )}
                           </TouchableOpacity>
@@ -521,7 +521,7 @@ export default function CalendarScreen() {
                             )}
                             <View className="flex-row items-center gap-2 mt-2 flex-wrap">
                               {/* Project Badge */}
-                              {project && !project.is_inbox_project && (
+                              {project && !project.inbox_project && (
                                 <View 
                                   className="px-2 py-1 rounded flex-row items-center gap-1"
                                   style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}

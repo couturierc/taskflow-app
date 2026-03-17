@@ -39,7 +39,7 @@ describe('Todoist API Integration (Real Account)', () => {
       const firstTask = tasks[0];
       expect(firstTask).toHaveProperty('id');
       expect(firstTask).toHaveProperty('content');
-      expect(firstTask).toHaveProperty('is_completed');
+      expect(firstTask).toHaveProperty('checked');
       expect(firstTask).toHaveProperty('priority');
       
       console.log(`Found ${tasks.length} tasks`);

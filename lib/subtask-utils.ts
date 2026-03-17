@@ -94,7 +94,7 @@ export function calculateSubtaskProgress(task: TaskWithChildren): {
   let total = task.children.length;
   
   task.children.forEach(child => {
-    if (child.is_completed) {
+    if (child.checked) {
       completed++;
     }
   });
