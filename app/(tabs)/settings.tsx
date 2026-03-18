@@ -1,6 +1,6 @@
 /**
  * Settings Screen
- * 
+ *
  * App configuration and account management
  */
 
@@ -134,7 +134,7 @@ export default function SettingsScreen() {
               onPress={() => Alert.alert('Info', 'Connected to Todoist via API token')}
             >
               <View className="flex-row items-center gap-3">
-                <View 
+                <View
                   className="w-10 h-10 rounded-full items-center justify-center"
                   style={{ backgroundColor: colors.primary + '20' }}
                 >

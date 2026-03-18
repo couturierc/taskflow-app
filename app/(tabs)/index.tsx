@@ -1,6 +1,6 @@
 /**
  * Today Screen
- * 
+ *
  * Displays tasks due today and overdue tasks
  */
 
@@ -95,11 +95,11 @@ export default function TodayScreen() {
         apiClient.getProjects(),
         apiClient.getLabels(),
       ]);
-      
+
       // Filter to today/overdue tasks and their subtasks
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
+
       // Find tasks due today or overdue
       const todayTaskIds = new Set<string>();
       allTasks.forEach(task => {
@@ -111,7 +111,7 @@ export default function TodayScreen() {
           }
         }
       });
-      
+
       // Also include subtasks of today's tasks (recursively)
       const includeSubtasks = (parentId: string) => {
         allTasks.forEach(task => {
@@ -122,10 +122,10 @@ export default function TodayScreen() {
         });
       };
       todayTaskIds.forEach(id => includeSubtasks(id));
-      
+
       // Filter to only today's tasks and their subtasks
       const todayTasks = allTasks.filter(task => todayTaskIds.has(task.id));
-      
+
       setTasks(todayTasks);
       setProjects(allProjects);
       setLabels(allLabels);
@@ -156,7 +156,7 @@ export default function TodayScreen() {
     if (!apiClient) return;
 
     // Optimistic update
-    setTasks(prev => prev.map(t => 
+    setTasks(prev => prev.map(t =>
       t.id === task.id ? { ...t, checked: !t.checked } : t
     ));
 
@@ -175,7 +175,7 @@ export default function TodayScreen() {
       }
     } catch (error) {
       // Revert optimistic update on error
-      setTasks(prev => prev.map(t => 
+      setTasks(prev => prev.map(t =>
         t.id === task.id ? { ...t, checked: task.checked } : t
       ));
       Alert.alert('Error', 'Failed to update task. Please try again.');
@@ -208,7 +208,7 @@ export default function TodayScreen() {
   // Organize tasks with subtasks
   const organizedTasks = organizeTasksWithSubtasks(tasks);
   const flatTasks = flattenTasksWithSubtasks(organizedTasks, collapsedTasks);
-  
+
   const filteredTasks = flatTasks.filter(task => {
     // Search filter
     if (searchQuery) {
@@ -268,9 +268,9 @@ export default function TodayScreen() {
               handleUncompleteTask(item);
             }}
           >
-            <View 
+            <View
               className="w-6 h-6 rounded-full border-2 items-center justify-center mt-0.5"
-              style={{ 
+              style={{
                 borderColor: colors.success,
                 backgroundColor: colors.success
               }}
@@ -279,13 +279,13 @@ export default function TodayScreen() {
             </View>
           </TouchableOpacity>
           <View className="flex-1">
-            <Text 
+            <Text
               className="text-base text-foreground"
               style={{ textDecorationLine: 'line-through', opacity: 0.6 }}
             >
               {item.content}
             </Text>
-            <View 
+            <View
               className="px-2 py-1 rounded self-start mt-2"
               style={{ backgroundColor: colors.success + '20' }}
             >
@@ -301,24 +301,24 @@ export default function TodayScreen() {
 
   function renderTask({ item }: { item: TaskWithChildren }) {
     const isOverdue = item.due && new Date(item.due.date) < new Date(new Date().setHours(0, 0, 0, 0));
-    
+
     const progress = hasSubtasks(item) ? calculateSubtaskProgress(item) : null;
     const indentWidth = item.level * 20; // 20px per level
     const project = projects.find(p => p.id === item.project_id);
     const isSubtask = item.level > 0;
     const hasChildren = item.children.length > 0;
     const isCollapsed = collapsedTasks.has(item.id);
-    
+
     return (
       <View className="flex-row">
         {/* Indent spacer with vertical line for subtasks */}
         {isSubtask && (
           <View style={{ width: indentWidth }} className="flex-row">
             {Array.from({ length: item.level }).map((_, i) => (
-              <View 
-                key={i} 
-                style={{ 
-                  width: 20, 
+              <View
+                key={i}
+                style={{
+                  width: 20,
                   borderLeftWidth: i === item.level - 1 ? 2 : 0,
                   borderLeftColor: colors.border,
                   marginLeft: 8,
@@ -351,7 +351,7 @@ export default function TodayScreen() {
               </Text>
             </TouchableOpacity>
           )}
-          
+
           {/* Checkbox */}
           <TouchableOpacity
             onPress={(e: any) => {
@@ -359,9 +359,9 @@ export default function TodayScreen() {
               handleToggleComplete(item);
             }}
           >
-            <View 
+            <View
             className="w-6 h-6 rounded-full border-2 items-center justify-center mt-0.5"
-            style={{ 
+            style={{
               borderColor: item.checked ? colors.success : colors.primary,
               backgroundColor: item.checked ? colors.success : 'transparent'
             }}
@@ -376,7 +376,7 @@ export default function TodayScreen() {
           <View className="flex-1">
             <View className="flex-row items-center gap-2">
               <View
-                style={{ 
+                style={{
                   opacity: item.checked ? 0.5 : 1,
                   flex: 1,
                 }}
@@ -385,7 +385,7 @@ export default function TodayScreen() {
               </View>
               {/* Collapsed indicator showing hidden count */}
               {hasChildren && isCollapsed && (
-                <View 
+                <View
                   className="px-2 py-0.5 rounded"
                   style={{ backgroundColor: colors.primary + '20' }}
                 >
@@ -395,7 +395,7 @@ export default function TodayScreen() {
                 </View>
               )}
             </View>
-            
+
             {item.description && (
               <View className="mt-1">
                 <MarkdownText content={item.description} variant="description" numberOfLines={2} />
@@ -406,11 +406,11 @@ export default function TodayScreen() {
             <View className="flex-row items-center gap-2 mt-2 flex-wrap">
               {/* Project Badge */}
               {project && !project.inbox_project && (
-                <View 
+                <View
                   className="px-2 py-1 rounded flex-row items-center gap-1"
                   style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }}
                 >
-                  <View 
+                  <View
                     className="w-2 h-2 rounded-full"
                     style={{ backgroundColor: project.color || colors.primary }}
                   />
@@ -419,16 +419,16 @@ export default function TodayScreen() {
                   </Text>
                 </View>
               )}
-              
+
               {item.due && (
-                <View 
+                <View
                   className="px-2 py-1 rounded flex-row items-center gap-1"
                   style={{ backgroundColor: isOverdue ? colors.error + '20' : colors.muted + '20' }}
                 >
                   {item.due.is_recurring && (
                     <Text style={{ color: isOverdue ? colors.error : colors.muted }}>🔁</Text>
                   )}
-                  <Text 
+                  <Text
                     className="text-xs font-medium"
                     style={{ color: isOverdue ? colors.error : colors.muted }}
                   >
@@ -436,9 +436,9 @@ export default function TodayScreen() {
                   </Text>
                 </View>
               )}
-              
+
               {item.priority > 1 && (
-                <View 
+                <View
                   className="px-2 py-1 rounded"
                   style={{ backgroundColor: item.priority === 4 ? colors.error + '20' : item.priority === 3 ? colors.warning + '20' : colors.primary + '20' }}
                 >
@@ -449,14 +449,14 @@ export default function TodayScreen() {
               )}
             </View>
             <LabelBadges labelNames={item.labels || []} labels={labels} />
-            
+
             {/* Subtask Progress */}
             {progress && progress.total > 0 && (
               <View className="flex-row items-center gap-2 mt-2">
                 <View className="flex-1 h-2 bg-border rounded-full overflow-hidden">
-                  <View 
+                  <View
                     className="h-full rounded-full"
-                    style={{ 
+                    style={{
                       width: `${progress.percentage}%`,
                       backgroundColor: progress.percentage === 100 ? colors.success : colors.primary
                     }}
